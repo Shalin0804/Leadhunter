@@ -6,11 +6,12 @@ import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
 import { ContactLeadModal, RecontactModal } from '../components/contactModals';
-import { fmtDate, fmtDateTime, fmtMoney, STATUS_LABELS, CONTACT_STATUS_LABELS } from '../utils/format';
+import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS } from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
 const CONTACT_STATUSES = Object.keys(CONTACT_STATUS_LABELS);
 const TEMPS = ['HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'];
+const STRENGTH_ORDER = { HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
 
 const CONTACT_TONE = {
   NOT_CONTACTED: 'gray',
@@ -163,52 +164,97 @@ export default function Leads() {
                 <thead>
                   <tr>
                     <th>Company</th>
-                    <th>Score</th>
-                    <th>Temp</th>
-                    <th>Stage</th>
+                    <th>Location</th>
+                    <th>Website</th>
+                    <th>Website score</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Opportunity</th>
+                    <th>Buying signal</th>
+                    <th>Lead score</th>
+                    <th>Priority</th>
                     <th>Contact status</th>
-                    <th>Assigned</th>
-                    <th>Est. value</th>
-                    <th>Next follow-up</th>
                     <th>Last contacted</th>
+                    <th>Next follow-up</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.map((l) => (
-                    <tr key={l.id}>
-                      <td>
-                        <Link to={`/leads/${l.id}`} className="cell-strong">
-                          {l.company?.company_name}
-                        </Link>
-                        <div className="cell-sub">{[l.company?.industry, l.company?.city].filter(Boolean).join(' · ')}</div>
-                      </td>
-                      <td><ScoreBadge value={l.lead_score} /></td>
-                      <td><TemperatureBadge value={l.lead_temperature} /></td>
-                      <td><StatusBadge value={l.status} /></td>
-                      <td><span className={`badge ${CONTACT_TONE[l.contact_status] || 'gray'}`}>{CONTACT_STATUS_LABELS[l.contact_status]}</span></td>
-                      <td className="text-sm">{l.assignedUser?.name || '—'}</td>
-                      <td className="nowrap">{fmtMoney(l.estimated_value)}</td>
-                      <td className="nowrap text-sm">{fmtDateTime(l.next_follow_up_at)}</td>
-                      <td className="nowrap text-sm">{fmtDateTime(l.last_contacted_at)}</td>
-                      <td>
-                        <div className="row-actions">
-                          {l.contact_status === 'NOT_CONTACTED' ? (
-                            <button className="icon-btn" title="Mark contacted" onClick={() => setModal({ type: 'contact', leadId: l.id })}>
-                              <FiPhoneCall />
-                            </button>
-                          ) : (
-                            <button className="icon-btn" title="Re-contact" onClick={() => setModal({ type: 'recontact', leadId: l.id })}>
-                              <FiRotateCcw />
-                            </button>
-                          )}
-                          <Link className="icon-btn" to={`/leads/${l.id}`} title="Open">
-                            <FiExternalLink />
+                  {data.items.map((l) => {
+                    const website = l.company?.websites?.[0];
+                    const email = l.company?.contacts?.find((c) => c.type === 'email');
+                    const phone = l.company?.contacts?.find((c) => c.type === 'phone');
+                    const topSignal = [...(l.company?.detectedSignals || [])].sort(
+                      (a, b) => STRENGTH_ORDER[b.signal_strength] - STRENGTH_ORDER[a.signal_strength]
+                    )[0];
+                    return (
+                      <tr key={l.id}>
+                        <td>
+                          <Link to={`/leads/${l.id}`} className="cell-strong">
+                            {l.company?.company_name}
                           </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          <div className="cell-sub">{l.company?.industry || '—'}</div>
+                        </td>
+                        <td className="text-sm">{[l.company?.city, l.company?.state].filter(Boolean).join(', ') || '—'}</td>
+                        <td>
+                          {l.company?.has_website ? (
+                            <a href={website?.url || l.company.website} target="_blank" rel="noreferrer" className="text-sm">
+                              {website?.url ? new URL(website.url).hostname.replace(/^www\./, '') : 'yes'}
+                            </a>
+                          ) : (
+                            <span className="badge warm">No website</span>
+                          )}
+                        </td>
+                        <td className="text-sm">{website?.opportunity_score != null ? `${100 - website.opportunity_score}/100` : '—'}</td>
+                        <td className="text-sm">
+                          {email ? (
+                            <span title={`source: ${email.source || 'unknown'}${email.verification_status ? `, ${email.verification_status}` : ''}`}>
+                              {email.value}
+                              {email.verification_status && (
+                                <span className={`badge ${email.verification_status === 'VERIFIED' ? 'green' : email.verification_status === 'INVALID' ? 'not_qualified' : 'gray'}`} style={{ marginLeft: 4 }}>
+                                  {email.verification_status}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="text-sm">{phone?.value || '—'}</td>
+                        <td className="text-sm">{l.recommended_service || '—'}</td>
+                        <td className="text-sm">
+                          {topSignal ? (
+                            <span className={`badge ${topSignal.signal_strength === 'HIGH' ? 'hot' : topSignal.signal_strength === 'MEDIUM' ? 'warm' : 'gray'}`} title={topSignal.signal_description}>
+                              {titleCase(topSignal.signal_type)}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td><ScoreBadge value={l.lead_score} /></td>
+                        <td className="text-sm">{l.priority}</td>
+                        <td><span className={`badge ${CONTACT_TONE[l.contact_status] || 'gray'}`}>{CONTACT_STATUS_LABELS[l.contact_status]}</span></td>
+                        <td className="nowrap text-sm">{fmtDateTime(l.last_contacted_at)}</td>
+                        <td className="nowrap text-sm">{fmtDateTime(l.next_follow_up_at)}</td>
+                        <td>
+                          <div className="row-actions">
+                            {l.contact_status === 'NOT_CONTACTED' ? (
+                              <button className="icon-btn" title="Mark contacted" onClick={() => setModal({ type: 'contact', leadId: l.id })}>
+                                <FiPhoneCall />
+                              </button>
+                            ) : (
+                              <button className="icon-btn" title="Re-contact" onClick={() => setModal({ type: 'recontact', leadId: l.id })}>
+                                <FiRotateCcw />
+                              </button>
+                            )}
+                            <Link className="icon-btn" to={`/leads/${l.id}`} title="Open">
+                              <FiExternalLink />
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

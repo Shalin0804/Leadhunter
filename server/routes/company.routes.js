@@ -14,6 +14,7 @@ router.post(
 router.put('/:id', asyncHandler(ctrl.update));
 router.delete('/:id', asyncHandler(ctrl.remove));
 router.post('/:id/rescore', asyncHandler(ctrl.rescore));
+router.post('/:id/enrich', asyncHandler(ctrl.enrichContact));
 router.post(
   '/:id/contacts',
   validate({ type: { required: true, in: ['email', 'phone'] }, value: { required: true } }),

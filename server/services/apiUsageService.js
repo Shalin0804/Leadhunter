@@ -12,11 +12,17 @@ async function getTodayUsage(provider) {
   return row;
 }
 
-/** Increment today's counters for a provider. */
-async function recordUsage(provider, { requests = 1, leadsCreated = 0 } = {}) {
+/** Increment today's counters for a provider, optionally bumping arbitrary metadata counters. */
+async function recordUsage(provider, { requests = 1, leadsCreated = 0, metadataDelta } = {}) {
   const row = await getTodayUsage(provider);
   row.request_count += requests;
   row.leads_created_count += leadsCreated;
+  if (metadataDelta) {
+    const meta = { ...(row.metadata || {}) };
+    for (const [k, v] of Object.entries(metadataDelta)) meta[k] = (meta[k] || 0) + v;
+    row.metadata = meta;
+    row.changed('metadata', true); // JSON column mutation needs an explicit flag for Sequelize to persist it
+  }
   await row.save();
   return row;
 }

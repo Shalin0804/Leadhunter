@@ -31,6 +31,7 @@ export const companyApi = {
   update: (id, body) => unwrap(api.put(`/companies/${id}`, body)),
   remove: (id) => unwrap(api.delete(`/companies/${id}`)),
   rescore: (id) => unwrap(api.post(`/companies/${id}/rescore`)),
+  enrichContact: (id) => unwrap(api.post(`/companies/${id}/enrich`)),
   addContact: (id, body) => unwrap(api.post(`/companies/${id}/contacts`, body)),
   addSocial: (id, body) => unwrap(api.post(`/companies/${id}/socials`, body)),
   exportCsv: (params) => downloadFile(`/companies/export${qs(params)}`, 'companies.csv'),

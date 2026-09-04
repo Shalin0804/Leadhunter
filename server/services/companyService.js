@@ -1,4 +1,4 @@
-const { Company, CompanyContact, CompanyWebsite, CompanySocial, LeadScore, Lead, Signal } = require('../models');
+const { Company, CompanyContact, CompanyWebsite, CompanySocial, LeadScore, Lead, Signal, DetectedSignal } = require('../models');
 const { scoreCompany } = require('./leadScoring');
 
 const PRESENCE_INCLUDE = [
@@ -7,8 +7,8 @@ const PRESENCE_INCLUDE = [
   { model: CompanySocial, as: 'socials' },
 ];
 
-// Everything the scoring engine needs (presence + active buying signals).
-const SCORING_INCLUDE = [...PRESENCE_INCLUDE, { model: Signal, as: 'signals' }];
+// Everything the scoring engine needs (presence + active buying signals + detected signals).
+const SCORING_INCLUDE = [...PRESENCE_INCLUDE, { model: Signal, as: 'signals' }, { model: DetectedSignal, as: 'detectedSignals' }];
 
 async function loadCompanyWithPresence(id, options = {}) {
   return Company.findByPk(id, { include: PRESENCE_INCLUDE, ...options });
@@ -41,6 +41,7 @@ async function rescoreCompany(companyId, { transaction, leadId } = {}) {
   company.lead_score = result.score;
   company.lead_temperature = result.temperature;
   company.recommended_service = result.recommendedService;
+  company.contactability_score = result.contactabilityScore;
   await company.save({ transaction });
 
   await LeadScore.create(

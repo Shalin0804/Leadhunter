@@ -150,6 +150,7 @@ alone becomes reliable and the external ping is just a harmless backup.
 | `APOLLO_API_KEY` | Render | optional — live Apollo search/enrichment (needs a paid Apollo plan for search) |
 | `GOOGLE_PLACES_API_KEY` | Render | optional — drop-in upgrade for automatic business discovery (default is free OpenStreetMap) |
 | `AUTOMATION_TRIGGER_SECRET` | Render | required for the external cron trigger above |
+| `HUNTER_API_KEY` | Render | optional — real email enrichment for qualified leads (free at hunter.io, 25 searches + 50 verifications/month) |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data

@@ -83,6 +83,17 @@ async function run() {
 
   r = await call('GET', `/companies/${newCompanyId}`);
   assert(r.status === 200 && r.json.data.analysis && typeof r.json.data.analysis.score === 'number', 'GET /companies/:id includes analysis');
+  assert(typeof r.json.data.analysis.contactabilityScore === 'number', 'analysis includes contactabilityScore (0-10)');
+  assert(Array.isArray(r.json.data.analysis.breakdown) && r.json.data.analysis.breakdown.length === 6, 'scoring breakdown has 6 categories');
+  assert(r.json.data.analysis.modelVersion === 'rule-based-v2', 'scoring is explicitly labeled rule-based, not AI');
+
+  // --- Contact enrichment (honest failure when HUNTER_API_KEY is absent) ---
+  r = await call('POST', `/companies/${newCompanyId}/enrich`);
+  if (r.status === 400) {
+    assert(/hunter/i.test(r.json.message) || /api key/i.test(r.json.message), 'enrichment fails with a clear "missing API key" message when unconfigured');
+  } else {
+    assert(r.status === 200, 'POST /companies/:id/enrich (Hunter configured)');
+  }
 
   r = await call('POST', '/leads', { company_id: newCompanyId, priority: 'HIGH' });
   assert(r.status === 201 && r.json.data.lead.status === 'NEW', 'POST /leads converts company');

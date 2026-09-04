@@ -47,6 +47,13 @@ module.exports = (sequelize) => {
       founded_year: { type: DataTypes.INTEGER, allowNull: true },
       enriched_at: { type: DataTypes.DATE, allowNull: true },
       enrichment_source: { type: DataTypes.STRING(40), allowNull: true },
+      enrichment_status: {
+        type: DataTypes.ENUM('not_attempted', 'pending', 'success', 'failed', 'skipped'),
+        allowNull: false,
+        defaultValue: 'not_attempted',
+      },
+      enrichment_error: { type: DataTypes.STRING(500), allowNull: true },
+      contactability_score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // 0-10
 
       // Cached latest scoring for fast discovery listing / filtering
       lead_score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

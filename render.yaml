@@ -43,3 +43,6 @@ services:
       # Required for the external cron trigger (see DEPLOY.md) to fire scheduled discovery runs.
       - key: AUTOMATION_TRIGGER_SECRET
         generateValue: true
+      # Optional — enables real contact enrichment (Hunter.io). Leave unset to disable.
+      - key: HUNTER_API_KEY
+        sync: false

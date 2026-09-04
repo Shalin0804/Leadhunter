@@ -1,5 +1,7 @@
 const config = require('./scoringConfig');
 const { recommendService } = require('./recommendedService');
+const { detectOpportunities } = require('./opportunityDetectionService');
+const { computeContactability } = require('./contactabilityService');
 
 const daysBetween = (a, b) => Math.floor((a.getTime() - b.getTime()) / 86400000);
 
@@ -24,8 +26,8 @@ function opportunityLevelForScore(score) {
 }
 
 /**
- * Build a normalized signal object from a Company instance (with contacts/websites/socials
- * eager-loaded when available). Also works off denormalized company flags.
+ * Build a normalized signal object from a Company instance (with contacts/websites/
+ * socials/signals/detectedSignals eager-loaded when available).
  */
 function extractSignals(company) {
   const plain = typeof company.get === 'function' ? company.get({ plain: true }) : company;
@@ -34,6 +36,7 @@ function extractSignals(company) {
   const contacts = plain.contacts || [];
   const socials = plain.socials || [];
   const signals = plain.signals || [];
+  const detectedSignals = plain.detectedSignals || [];
 
   const activeSignals = signals.filter((s) => config.activeSignalStatuses.includes(s.status));
 
@@ -42,7 +45,6 @@ function extractSignals(company) {
   // existence must not be read as "has a website".
   const realWebsites = websites.filter((w) => w.status !== 'no_website');
   const primaryWebsite = realWebsites[0];
-  // An audit explicitly ran and found nothing — trust that over stale denormalized flags.
   const noWebsiteConfirmed = websites.length > 0 && realWebsites.length === 0;
   const hasWebsite = !noWebsiteConfirmed && !!(primaryWebsite || plain.website || plain.has_website);
   const websiteStatus = primaryWebsite?.status || (hasWebsite ? 'unknown' : 'no_website');
@@ -60,6 +62,8 @@ function extractSignals(company) {
     state: plain.state,
     city: plain.city,
     dateOfIncorporation: plain.date_of_incorporation ? new Date(plain.date_of_incorporation) : null,
+    firstDiscoveredAt: plain.first_discovered_at ? new Date(plain.first_discovered_at) : null,
+    timesDiscovered: plain.times_discovered || 0,
     hasWebsite,
     websiteStatus,
     websiteHealth,
@@ -67,64 +71,143 @@ function extractSignals(company) {
     hasPublicBusinessEmail,
     hasPhone,
     hasSocial,
+    contacts,
     activeSignals,
     hasActiveSignal: activeSignals.length > 0,
     requestedServices: [...new Set(activeSignals.map((x) => x.service).filter(Boolean))],
+    detectedSignals,
   };
 }
 
+/** Website Opportunity: 0-20, from the live audit's health rating. */
+function scoreWebsiteOpportunity(s) {
+  const points = config.websiteOpportunityByHealth[s.websiteStatus === 'no_website' ? 'no_website' : s.websiteHealth] ?? config.websiteOpportunityByHealth.unknown;
+  const label = s.websiteStatus === 'no_website' ? 'No website found' : `Website health: ${s.websiteHealth}`;
+  return { score: points, max: config.categoryMax.websiteOpportunity, reasons: points > 0 ? [label] : [] };
+}
+
+/** Software Opportunity: 0-20, from opportunityDetectionService's non-website opportunities. */
+function scoreSoftwareOpportunity(s, opportunities) {
+  const nonWebsite = opportunities.filter((o) => !['WEBSITE', 'WEBSITE_REDESIGN'].includes(o.type));
+  const tier = config.softwareOpportunityByCount.find((t) => nonWebsite.length >= t.min);
+  const points = tier ? tier.points : 0;
+  const reasons = nonWebsite.slice(0, 3).map((o) => `${o.label} opportunity`);
+  return { score: points, max: config.categoryMax.softwareOpportunity, reasons };
+}
+
+/** Business Growth: 0-15, real registration/discovery recency only. */
+function scoreBusinessGrowth(s) {
+  const now = new Date();
+  const isRecentlyRegistered =
+    s.dateOfIncorporation && daysBetween(now, s.dateOfIncorporation) <= config.recentlyRegisteredDays && daysBetween(now, s.dateOfIncorporation) >= 0;
+  if (isRecentlyRegistered) {
+    return { score: config.businessGrowthPoints.recentlyRegistered, max: config.categoryMax.businessGrowth, reasons: ['Recently registered business'] };
+  }
+  if (s.timesDiscovered <= 1 && s.firstDiscoveredAt) {
+    return { score: config.businessGrowthPoints.newlyDiscovered, max: config.categoryMax.businessGrowth, reasons: ['Newly discovered'] };
+  }
+  return { score: 0, max: config.categoryMax.businessGrowth, reasons: [] };
+}
+
+/** Buying Signal: 0-20. Explicit intent (someone asked) beats inferred signals. */
+function scoreBuyingSignal(s) {
+  if (s.hasActiveSignal) {
+    const srcs = [...new Set(s.activeSignals.map((x) => x.source))].join(', ');
+    return {
+      score: config.buyingSignalPoints.activeIntentSignal,
+      max: config.categoryMax.buyingSignal,
+      reasons: [`Explicitly asked for a service via ${srcs}`],
+    };
+  }
+  const detected = s.detectedSignals || [];
+  if (!detected.length) return { score: 0, max: config.categoryMax.buyingSignal, reasons: [] };
+
+  const strongest = detected.reduce((best, d) => {
+    const points = config.buyingSignalPoints.detectedSignalStrength[d.signal_strength] || 0;
+    const bestPoints = config.buyingSignalPoints.detectedSignalStrength[best?.signal_strength] || 0;
+    return points > bestPoints ? d : best;
+  }, detected[0]);
+  const points = Math.min(config.categoryMax.buyingSignal, config.buyingSignalPoints.detectedSignalStrength[strongest.signal_strength] || 0);
+  return { score: points, max: config.categoryMax.buyingSignal, reasons: detected.slice(0, 3).map((d) => d.signal_description) };
+}
+
+/** Contactability: 0-10, delegated to contactabilityService. */
+function scoreContactability(s) {
+  const result = computeContactability({ contacts: s.contacts, hasWebsite: s.hasWebsite, hasSocial: s.hasSocial });
+  return { score: result.score, max: config.categoryMax.contactability, reasons: result.reasons, raw: result };
+}
+
+/** Codefloor Fit: 0-15, target industry + target location. */
+function scoreCodefloorFit(s) {
+  let score = 0;
+  const reasons = [];
+  if (containsAny(s.industry, config.targetIndustries)) {
+    score += config.codefloorFitPoints.industry;
+    reasons.push(`Target industry match: "${s.industry}"`);
+  }
+  if (containsAny(s.state, config.targetLocations) || containsAny(s.city, config.targetLocations)) {
+    score += config.codefloorFitPoints.location;
+    reasons.push(`Target location match: "${[s.city, s.state].filter(Boolean).join(', ')}"`);
+  }
+  return { score: Math.min(config.categoryMax.codefloorFit, score), max: config.categoryMax.codefloorFit, reasons };
+}
+
 /**
- * Core scoring routine.
- * @returns {{ score, temperature, opportunityLevel, recommendedService, breakdown, reasons, missingAssets, modelVersion }}
+ * Core scoring routine — rule-based (not an LLM call). Every point is traceable
+ * to a category in the returned `breakdown`.
+ * @returns {{ score, temperature, opportunityLevel, recommendedService, breakdown, reasons, missingAssets, contactabilityScore, modelVersion }}
  */
 function scoreCompany(company) {
   const s = extractSignals(company);
-  const R = config.rules;
-  const breakdown = [];
-  let raw = 0;
+  const opportunities = detectOpportunities({
+    industry: s.industry,
+    websiteAudit: { status: s.websiteStatus, health: s.websiteHealth, isMobileFriendly: undefined },
+  });
 
-  const add = (key, active) => {
-    const rule = R[key];
-    if (!rule) return;
-    breakdown.push({ key, label: rule.label, points: active ? rule.points : 0, applied: !!active });
-    if (active) raw += rule.points;
+  const categories = {
+    websiteOpportunity: scoreWebsiteOpportunity(s),
+    softwareOpportunity: scoreSoftwareOpportunity(s, opportunities),
+    businessGrowth: scoreBusinessGrowth(s),
+    buyingSignal: scoreBuyingSignal(s),
+    contactability: scoreContactability(s),
+    codefloorFit: scoreCodefloorFit(s),
   };
 
-  const now = new Date();
-  const isRecent =
-    s.dateOfIncorporation && daysBetween(now, s.dateOfIncorporation) <= config.recentlyRegisteredDays && daysBetween(now, s.dateOfIncorporation) >= 0;
+  const CATEGORY_LABELS = {
+    websiteOpportunity: 'Website Opportunity',
+    softwareOpportunity: 'Software Opportunity',
+    businessGrowth: 'Business Growth',
+    buyingSignal: 'Buying Signal',
+    contactability: 'Contactability',
+    codefloorFit: 'Codefloor Fit',
+  };
 
-  const poorWebsite =
-    s.hasWebsite && ['poor', 'outdated', 'fair'].includes(String(s.websiteHealth).toLowerCase());
+  const breakdown = Object.entries(categories).map(([key, c]) => ({
+    key,
+    label: CATEGORY_LABELS[key],
+    score: c.score,
+    max: c.max,
+    reasons: c.reasons,
+  }));
 
-  add('activeBuyingSignal', s.hasActiveSignal);
-  add('recentlyRegistered', isRecent);
-  add('targetIndustry', containsAny(s.industry, config.targetIndustries));
-  add('targetLocation', containsAny(s.state, config.targetLocations) || containsAny(s.city, config.targetLocations));
-  add('noWebsite', !s.hasWebsite);
-  add('poorWebsite', poorWebsite);
-  add('publicBusinessEmail', s.hasPublicBusinessEmail);
-  add('businessPhone', s.hasPhone);
-  add('socialPresence', s.hasSocial);
-
-  const score = Math.max(0, Math.min(config.maxScore, Math.round(raw)));
+  const rawTotal = breakdown.reduce((sum, c) => sum + c.score, 0);
+  const score = Math.max(0, Math.min(config.maxScore, Math.round(rawTotal)));
   const temperature = temperatureForScore(score);
   const opportunityLevel = opportunityLevelForScore(score);
 
-  const reasons = breakdown.filter((b) => b.applied).map((b) => `${b.label} (+${b.points})`);
+  const reasons = breakdown
+    .filter((c) => c.score > 0)
+    .map((c) => `${c.label}: ${c.score}/${c.max}${c.reasons[0] ? ` (${c.reasons[0]})` : ''}`);
 
   const missingAssets = [];
   if (!s.hasWebsite) missingAssets.push('Website');
-  else if (poorWebsite) missingAssets.push('Modern / healthy website');
+  else if (['poor', 'outdated'].includes(s.websiteHealth)) missingAssets.push('Modern / healthy website');
   if (!s.hasEmail) missingAssets.push('Business email');
   if (!s.hasPhone) missingAssets.push('Business phone');
   if (!s.hasSocial) missingAssets.push('Social media presence');
 
-  // A prospect who explicitly asked for a service wins over the inferred one.
-  const requestedLabel = s.requestedServices
-    .map((svc) => config.signalServiceLabels[svc])
-    .find(Boolean);
-
+  const requestedLabel = s.requestedServices.map((svc) => config.signalServiceLabels[svc]).find(Boolean);
+  const topOpportunity = opportunities[0]?.label;
   const recommendedService =
     requestedLabel ||
     recommendService({
@@ -134,12 +217,9 @@ function scoreCompany(company) {
       hasEmail: s.hasEmail,
       hasPhone: s.hasPhone,
       hasSocial: s.hasSocial,
-    });
-
-  if (s.hasActiveSignal) {
-    const srcs = [...new Set(s.activeSignals.map((x) => x.source))].join(', ');
-    reasons.unshift(`Asked for ${requestedLabel || 'a service'} via ${srcs}`);
-  }
+    }) ||
+    topOpportunity ||
+    null;
 
   return {
     score,
@@ -148,10 +228,12 @@ function scoreCompany(company) {
     recommendedService,
     requestedServices: s.requestedServices,
     hasActiveSignal: s.hasActiveSignal,
+    contactabilityScore: categories.contactability.score,
+    opportunities,
     breakdown,
     reasons,
     missingAssets,
-    modelVersion: config.modelVersion,
+    modelVersion: config.modelVersion, // 'rule-based-v2' — deterministic, not an LLM
   };
 }
 

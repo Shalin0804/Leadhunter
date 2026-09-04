@@ -16,6 +16,8 @@ const { getDiscoveryProvider } = require('../providers');
 const { findMatchingCompany, normalizeDomain, normalizePhone, normalizeName } = require('./dedupeService');
 const { auditWebsite } = require('./websiteAuditService');
 const { detectOpportunities } = require('./opportunityDetectionService');
+const { detectAndSaveSignals } = require('./signalDetectionService');
+const { enrichCompany } = require('./enrichmentService');
 const { qualify } = require('./aiQualificationService');
 const { rescoreCompany } = require('./companyService');
 const apiUsage = require('./apiUsageService');
@@ -121,6 +123,9 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
     hot_leads: 0,
     failed_requests: 0,
     api_calls_used: 0,
+    enrichments_attempted: 0,
+    enrichments_succeeded: 0,
+    emails_found: 0,
   };
 
   try {
@@ -184,12 +189,40 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
           websiteAudit = await analyzeWebsite(company);
         }
 
-        const opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
-        const { result: scoring } = (await rescoreCompany(company.id)) || {};
+        // Real, observable-only signals (no website, outdated site, recently registered, ...).
+        // Distinct from the `signals` table, which records a prospect explicitly asking for work.
+        if (settings.autoDetectBuyingSignals) {
+          await detectAndSaveSignals(company.id);
+        }
+
+        let opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
+        let scoring = (await rescoreCompany(company.id))?.result;
         if (!scoring) continue;
 
         if (scoring.score < minLeadScore) {
           continue; // company saved for reference, but not promoted to a lead
+        }
+
+        // Contact enrichment — ONLY for businesses whose score already cleared the
+        // (separately configurable) enrichment bar, and capped per run. Failure here
+        // never fails the run: enrichCompany() catches its own errors.
+        if (
+          settings.autoEnrichContacts &&
+          scoring.score >= settings.enrichmentThreshold &&
+          counters.enrichments_attempted < settings.maxEnrichmentsPerRun
+        ) {
+          counters.enrichments_attempted += 1;
+          const enrichResult = await enrichCompany(company.id, { providerKey: settings.enrichmentProvider });
+          if (enrichResult.status === 'success' && enrichResult.contact) {
+            counters.enrichments_succeeded += 1;
+            counters.emails_found += 1;
+            // Contact info may have improved contactability — rescore for the final, saved value.
+            opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
+            scoring = (await rescoreCompany(company.id))?.result || scoring;
+          } else if (enrichResult.status === 'failed') {
+            // eslint-disable-next-line no-console
+            console.error(`[enrichment] company ${company.id} failed: ${enrichResult.reason}`);
+          }
         }
 
         counters.qualified_leads += 1;

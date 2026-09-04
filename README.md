@@ -52,6 +52,57 @@ See **[DEPLOY.md](DEPLOY.md)** for wiring up reliable scheduling (a free
 Render instance sleeps when idle, so a scheduled run needs an external cron
 ping — instructions included) and for the optional Google Places upgrade.
 
+## Contact enrichment (Hunter.io)
+
+**Rule-based lead scoring, not AI** — every score is a plain, auditable sum of
+6 weighted categories (see below). No LLM is called anywhere in this pipeline.
+
+Set `HUNTER_API_KEY` (free at [hunter.io](https://hunter.io) — 25 domain
+searches + 50 verifications/month) to enable automatic email discovery for
+**qualified leads only**:
+
+```
+Discover → Dedupe → Website check → Score
+  → IF score >= enrichmentThreshold (default 60) → Hunter domain search
+  → best candidate → Hunter email verifier → save
+```
+
+- Every enriched email carries `email_status` (`VERIFIED` only if Hunter's
+  verifier endpoint actually ran and said so — never just assumed),
+  `confidence`, and `source: 'hunter'`.
+- Cost control: skipped entirely if the company already has a `VERIFIED`/`VALID`
+  email, was enriched in the last 30 days, or has no website (no domain to
+  search); capped at `maxEnrichmentsPerRun` per run.
+- A failed enrichment never fails the whole run — it's recorded on the company
+  (`enrichment_status`, `enrichment_error`) and the run continues.
+- Without a key, the pipeline runs exactly the same but skips this step —
+  `POST /api/companies/:id/enrich` returns a clear "Hunter.io is not
+  configured" error rather than pretending to succeed.
+
+### Lead scoring breakdown (max 100)
+
+| Category | Max | Source |
+|---|---|---|
+| Website Opportunity | 20 | Live website audit (no website / outdated / poor / good / excellent) |
+| Software Opportunity | 20 | Detected CRM/booking/appointment/e-commerce/custom-software opportunities |
+| Business Growth | 15 | Real incorporation date or first-discovered recency |
+| Buying Signal | 20 | An explicit ask (highest) or an auto-detected signal (below) |
+| Contactability | 10 | Verified email + phone + website (10) down to nothing (0) |
+| Codefloor Fit | 15 | Target industry + target location match |
+
+Every company profile shows the full breakdown with the reason for each
+category's points — nothing is a black box.
+
+### Automatic signal detection
+
+Distinct from the manually-logged "buying signals" (someone asked for work).
+These are inferred only from data this app has actually collected — no
+website, an outdated site, recent registration, an online-booking gap for a
+hotel/restaurant/clinic, an e-commerce gap for a retailer, active social
+presence. **Not implemented** (no reliable public data source available):
+hiring signals, expansion/new-branch signals, new-product signals — these are
+not fabricated.
+
 ## Apollo.io (live company search + enrichment)
 
 Optional. Set `APOLLO_API_KEY` (Apollo → Settings → Integrations → API) in

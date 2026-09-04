@@ -16,6 +16,12 @@ const DEFAULTS = {
   autoDetectBuyingSignals: true,
   autoSaveQualifiedLeads: true,
   provider: 'osm', // osm | google_places
+
+  // Contact enrichment (Hunter) — only runs for companies whose score already
+  // cleared this bar, and only up to this many times per run (cost control).
+  enrichmentThreshold: 60,
+  maxEnrichmentsPerRun: 20,
+  enrichmentProvider: 'hunter',
 };
 
 async function getSettings() {

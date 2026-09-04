@@ -49,6 +49,10 @@ module.exports = {
     apiKey: env('GOOGLE_PLACES_API_KEY', ''),
   },
 
+  hunter: {
+    apiKey: env('HUNTER_API_KEY', ''),
+  },
+
   automation: {
     // Shared secret an external cron service must send to trigger a scheduled run.
     triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),

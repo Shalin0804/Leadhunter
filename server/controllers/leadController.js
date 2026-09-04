@@ -9,6 +9,9 @@ const {
   LeadStatusHistory,
   LeadScore,
   Signal,
+  CompanyContact,
+  CompanyWebsite,
+  DetectedSignal,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const { likeOp } = require('../utils/dialect');
@@ -17,6 +20,7 @@ const { convertCompanyToLead, changeLeadStatus, markContacted, setContactStatus,
 const { sendCsv } = require('../utils/csv');
 
 const companyAttrs = ['id', 'company_name', 'cin', 'industry', 'state', 'city', 'website', 'date_of_incorporation'];
+const companyAttrsFull = [...companyAttrs, 'contactability_score', 'has_email', 'has_phone', 'has_website'];
 
 function buildLeadWhere(q) {
   const where = {};
@@ -27,11 +31,16 @@ function buildLeadWhere(q) {
   if (q.contact_status) where.contact_status = q.contact_status.includes(',') ? { [Op.in]: q.contact_status.split(',') } : q.contact_status;
   if (q.lead_status) where.lead_status = q.lead_status;
   if (q.source) where.source = q.source;
-  // "New leads" view: hide anything already engaged, unless explicitly asked to include it.
-  if (q.new_only === 'true' && q.include_contacted !== 'true') where.contact_status = 'NOT_CONTACTED';
+  // "New leads" view (Priority 13): NOT_CONTACTED + not archived + score >= configured
+  // minimum, unless the caller explicitly opts into seeing previously-contacted ones.
+  if (q.new_only === 'true' && q.include_contacted !== 'true') {
+    where.contact_status = 'NOT_CONTACTED';
+    where.lead_status = { [Op.ne]: 'ARCHIVED' };
+  }
 
   const score = {};
   if (q.min_score) score[Op.gte] = Number(q.min_score);
+  else if (q.new_only === 'true' && q.new_leads_min_score) score[Op.gte] = Number(q.new_leads_min_score);
   if (q.max_score) score[Op.lte] = Number(q.max_score);
   if (Object.getOwnPropertySymbols(score).length) where.lead_score = score;
 
@@ -65,6 +74,16 @@ function companyWhere(q) {
 
 exports.list = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
+
+  // "New leads" view's score floor is server-configured (Automation Settings ->
+  // Minimum lead score), not something the client passes — keeps the definition
+  // of "new" consistent with what automation itself qualifies as a lead.
+  if (req.query.new_only === 'true' && !req.query.min_score) {
+    const { getSettings } = require('../services/automationSettingsService');
+    const settings = await getSettings();
+    req.query.new_leads_min_score = settings.minLeadScore;
+  }
+
   const where = buildLeadWhere(req.query);
   const cw = companyWhere(req.query);
 
@@ -75,7 +94,17 @@ exports.list = async (req, res) => {
   const { rows, count } = await Lead.findAndCountAll({
     where,
     include: [
-      { model: Company, as: 'company', attributes: companyAttrs, ...(cw ? { where: cw, required: true } : {}) },
+      {
+        model: Company,
+        as: 'company',
+        attributes: companyAttrsFull,
+        include: [
+          { model: CompanyContact, as: 'contacts' },
+          { model: CompanyWebsite, as: 'websites' },
+          { model: DetectedSignal, as: 'detectedSignals' },
+        ],
+        ...(cw ? { where: cw, required: true } : {}),
+      },
       { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
     ],
     order: [[sort, dir], ['id', 'DESC']],
@@ -124,7 +153,15 @@ exports.exportCsv = async (req, res) => {
 exports.get = async (req, res) => {
   const lead = await Lead.findByPk(req.params.id, {
     include: [
-      { model: Company, as: 'company' },
+      {
+        model: Company,
+        as: 'company',
+        include: [
+          { model: CompanyContact, as: 'contacts' },
+          { model: CompanyWebsite, as: 'websites' },
+          { model: DetectedSignal, as: 'detectedSignals' },
+        ],
+      },
       { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
       { model: User, as: 'createdBy', attributes: ['id', 'name', 'email'] },
       { model: LeadStatusHistory, as: 'statusHistory', include: [{ model: User, as: 'changedBy', attributes: ['id', 'name'] }] },
@@ -224,6 +261,7 @@ exports.contact = async (req, res) => {
     userId: req.user.id,
     method: req.body.method,
     note: req.body.note,
+    nextFollowUpAt: req.body.next_follow_up_at || undefined,
   });
   const full = await Lead.findByPk(lead.id, {
     include: [

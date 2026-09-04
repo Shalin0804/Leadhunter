@@ -12,16 +12,18 @@ export function ContactLeadModal({ open, onClose, leadId, onDone }) {
   const toast = useToast();
   const [method, setMethod] = useState('EMAIL');
   const [note, setNote] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
     setBusy(true);
     try {
-      await leadApi.contact(leadId, { method, note: note || undefined });
-      toast.success('Marked as contacted');
+      await leadApi.contact(leadId, { method, note: note || undefined, next_follow_up_at: followUpDate || undefined });
+      toast.success(followUpDate ? 'Marked as contacted + follow-up scheduled' : 'Marked as contacted');
       onDone?.();
       onClose();
       setNote('');
+      setFollowUpDate('');
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -46,6 +48,11 @@ export function ContactLeadModal({ open, onClose, leadId, onDone }) {
         <select className="select" value={method} onChange={(e) => setMethod(e.target.value)}>
           {METHODS.map((m) => <option key={m} value={m}>{CONTACT_METHOD_LABELS[m]}</option>)}
         </select>
+      </div>
+      <div className="field">
+        <label>Follow-up date (optional)</label>
+        <input className="input" type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+        <div className="help-text">Creates a follow-up task automatically.</div>
       </div>
       <div className="field">
         <label>Note (optional)</label>

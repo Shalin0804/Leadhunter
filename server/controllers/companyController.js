@@ -11,6 +11,7 @@ const {
   Task,
   User,
   Signal,
+  DetectedSignal,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
@@ -53,6 +54,7 @@ exports.get = async (req, res) => {
       { model: CompanyWebsite, as: 'websites' },
       { model: CompanySocial, as: 'socials' },
       { model: Signal, as: 'signals', separate: true, order: [['captured_at', 'DESC']] },
+      { model: DetectedSignal, as: 'detectedSignals', separate: true, order: [['signal_date', 'DESC']] },
       {
         model: Lead,
         as: 'leads',
@@ -162,6 +164,20 @@ exports.rescore = async (req, res) => {
   const result = await rescoreCompany(req.params.id);
   if (!result) throw ApiError.notFound('Company not found');
   return ok(res, { company: result.company, analysis: result.result });
+};
+
+// Manual, explicit enrichment (bypasses the automatic score threshold — this is
+// the human clicking a button, not the automated pipeline deciding on its own).
+exports.enrichContact = async (req, res) => {
+  const { enrichCompany } = require('../services/enrichmentService');
+  const company = await Company.findByPk(req.params.id);
+  if (!company) throw ApiError.notFound('Company not found');
+
+  const result = await enrichCompany(company.id, { providerKey: req.body.provider || 'hunter' });
+  if (result.status === 'failed') throw ApiError.badRequest(result.reason);
+
+  const rescored = await rescoreCompany(company.id);
+  return ok(res, { enrichment: result, company: rescored?.company, analysis: rescored?.result });
 };
 
 // --- Sub-resources ---

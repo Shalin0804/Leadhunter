@@ -6,9 +6,14 @@ const { history } = require('../services/apiUsageService');
 const { SearchRun, LeadSource, Lead, Company } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
-const { listDiscoveryProviders } = require('../providers');
+const { listDiscoveryProviders, listEnrichmentProviders } = require('../providers');
 
-exports.getSettings = async (req, res) => ok(res, { settings: await getSettings(), discoveryProviders: listDiscoveryProviders() });
+exports.getSettings = async (req, res) =>
+  ok(res, {
+    settings: await getSettings(),
+    discoveryProviders: listDiscoveryProviders(),
+    enrichmentProviders: listEnrichmentProviders(),
+  });
 
 exports.updateSettings = async (req, res) => {
   const settings = await updateSettings(req.body || {});

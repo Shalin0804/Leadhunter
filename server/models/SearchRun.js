@@ -28,6 +28,9 @@ module.exports = (sequelize) => {
       hot_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       failed_requests: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       api_calls_used: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      enrichments_attempted: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      enrichments_succeeded: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      emails_found: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
       error_message: { type: DataTypes.TEXT, allowNull: true },
       summary: { type: DataTypes.JSON, allowNull: true },

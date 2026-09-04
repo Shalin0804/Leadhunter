@@ -6,6 +6,7 @@ const ApiCompanyProvider = require('./ApiCompanyProvider');
 const ApolloCompanyProvider = require('./ApolloCompanyProvider');
 const OsmBusinessProvider = require('./OsmBusinessProvider');
 const GooglePlacesProvider = require('./GooglePlacesProvider');
+const HunterProvider = require('./HunterProvider');
 
 // Provider registry — add new sources here.
 const registry = {
@@ -23,6 +24,11 @@ const discoveryRegistry = {
   google_places: new GooglePlacesProvider(),
 };
 
+// Separate registry for *contact enrichment* sources (domainSearch()/verifyEmail()).
+const enrichmentRegistry = {
+  hunter: new HunterProvider(),
+};
+
 const getProvider = (key = 'csv') => {
   const p = registry[key];
   if (!p) throw new Error(`Unknown company data provider: ${key}`);
@@ -35,19 +41,20 @@ const getDiscoveryProvider = (key = 'osm') => {
   return p;
 };
 
+const getEnrichmentProvider = (key = 'hunter') => {
+  const p = enrichmentRegistry[key];
+  if (!p) throw new Error(`Unknown enrichment provider: ${key}`);
+  return p;
+};
+
 const listProviders = () =>
-  Object.values(registry).map((p) => ({
-    key: p.key,
-    label: p.label,
-    configured: p.isConfigured(),
-  }));
+  Object.values(registry).map((p) => ({ key: p.key, label: p.label, configured: p.isConfigured() }));
 
 const listDiscoveryProviders = () =>
-  Object.values(discoveryRegistry).map((p) => ({
-    key: p.key,
-    label: p.label,
-    configured: p.isConfigured(),
-  }));
+  Object.values(discoveryRegistry).map((p) => ({ key: p.key, label: p.label, configured: p.isConfigured() }));
+
+const listEnrichmentProviders = () =>
+  Object.values(enrichmentRegistry).map((p) => ({ key: p.key, label: p.label, configured: p.isConfigured() }));
 
 module.exports = {
   CompanyDataProvider,
@@ -58,10 +65,14 @@ module.exports = {
   ApolloCompanyProvider,
   OsmBusinessProvider,
   GooglePlacesProvider,
+  HunterProvider,
   registry,
   discoveryRegistry,
+  enrichmentRegistry,
   getProvider,
   getDiscoveryProvider,
+  getEnrichmentProvider,
   listProviders,
   listDiscoveryProviders,
+  listEnrichmentProviders,
 };

@@ -19,6 +19,7 @@ const LeadSource = require('./LeadSource')(sequelize);
 const SearchRun = require('./SearchRun')(sequelize);
 const ApiUsage = require('./ApiUsage')(sequelize);
 const Outreach = require('./Outreach')(sequelize);
+const DetectedSignal = require('./DetectedSignal')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -95,6 +96,10 @@ Lead.hasMany(Outreach, { as: 'outreach', foreignKey: 'lead_id' });
 Outreach.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id' });
 Outreach.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id' });
 
+// Detected (auto-inferred) signals
+Company.hasMany(DetectedSignal, { as: 'detectedSignals', foreignKey: 'company_id', onDelete: 'CASCADE' });
+DetectedSignal.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
+
 // Imports
 User.hasMany(CompanyImport, { as: 'imports', foreignKey: 'user_id' });
 CompanyImport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -123,6 +128,7 @@ const db = {
   SearchRun,
   ApiUsage,
   Outreach,
+  DetectedSignal,
 };
 
 module.exports = db;

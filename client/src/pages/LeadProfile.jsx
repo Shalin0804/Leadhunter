@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
-import { leadApi } from '../services/endpoints';
+import { leadApi, companyApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
@@ -43,6 +43,19 @@ export default function LeadProfile() {
     );
 
   const { lead, activities, tasks, notes } = data;
+  const emails = lead.company?.contacts?.filter((c) => c.type === 'email') || [];
+  const phones = lead.company?.contacts?.filter((c) => c.type === 'phone') || [];
+  const primaryWebsite = lead.company?.websites?.[0];
+
+  const enrichNow = async () => {
+    try {
+      const res = await companyApi.enrichContact(lead.company_id);
+      toast.success(res.enrichment?.status === 'success' ? 'Contact enrichment complete' : `Enrichment ${res.enrichment?.status}: ${res.enrichment?.reason || ''}`);
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
 
   const setStatus = async (status) => {
     try {
@@ -183,6 +196,51 @@ export default function LeadProfile() {
               <Row label="Created">{fmtDate(lead.created_at)}</Row>
               <Row label="Source">{lead.source === 'automation' ? <span className="badge blue">Automation</span> : 'Manual'}</Row>
               {lead.lost_reason && <Row label="Lost reason">{lead.lost_reason}</Row>}
+            </dl>
+          </Card>
+
+          <Card
+            title="Contact Information"
+            actions={<button className="btn btn-sm" onClick={enrichNow}><FiZap /> Enrich now</button>}
+          >
+            {emails.length > 0 ? (
+              emails.map((e) => (
+                <dl className="def-list mb-3" key={e.id}>
+                  <Row label="Email">{e.value}</Row>
+                  <Row label="Verification status">
+                    <span className={`badge ${e.verification_status === 'VERIFIED' ? 'green' : e.verification_status === 'INVALID' ? 'not_qualified' : e.verification_status === 'RISKY' ? 'warm' : 'gray'}`}>
+                      {e.verification_status || 'UNKNOWN'}
+                    </span>
+                    {e.confidence != null && <span className="cell-sub" style={{ marginLeft: 8 }}>{e.confidence}% confidence</span>}
+                  </Row>
+                  {e.contact_name && <Row label="Contact name">{e.contact_name}</Row>}
+                  {e.job_title && <Row label="Role">{e.job_title}</Row>}
+                  <Row label="Source">{e.source || 'unknown'}{e.is_role_based ? ' (role-based inbox)' : ''}</Row>
+                </dl>
+              ))
+            ) : (
+              <p className="text-muted text-sm mb-3">No email on file yet.</p>
+            )}
+            {phones.length > 0 ? (
+              phones.map((p) => (
+                <dl className="def-list mb-3" key={p.id}>
+                  <Row label="Phone">{p.value}</Row>
+                  <Row label="Source">{p.source || 'unknown'}</Row>
+                </dl>
+              ))
+            ) : (
+              <p className="text-muted text-sm mb-3">No phone on file yet.</p>
+            )}
+            <dl className="def-list">
+              <Row label="Website">
+                {primaryWebsite ? <a href={primaryWebsite.url} target="_blank" rel="noreferrer">{primaryWebsite.url}</a> : lead.company?.website || 'No website found'}
+              </Row>
+              <Row label="Enriched at">{fmtDateTime(lead.company?.enriched_at)}</Row>
+              <Row label="Enrichment status">
+                <span className="badge gray">{lead.company?.enrichment_status || 'not_attempted'}</span>
+                {lead.company?.enrichment_error && <span className="cell-sub" style={{ marginLeft: 8 }}>{lead.company.enrichment_error}</span>}
+              </Row>
+              <Row label="Contactability">{lead.company?.contactability_score}/10</Row>
             </dl>
           </Card>
 

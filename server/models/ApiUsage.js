@@ -10,6 +10,8 @@ module.exports = (sequelize) => {
       usage_date: { type: DataTypes.DATEONLY, allowNull: false },
       request_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       leads_created_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      // Provider-specific extra counters (e.g. Hunter: emails_found, emails_verified, failed_enrichments).
+      metadata: { type: DataTypes.JSON, allowNull: true },
     },
     {
       tableName: 'api_usage',

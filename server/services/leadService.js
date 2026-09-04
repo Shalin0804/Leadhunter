@@ -1,4 +1,4 @@
-const { sequelize, Company, Lead, LeadStatusHistory, Activity, Note } = require('../models');
+const { sequelize, Company, Lead, LeadStatusHistory, Activity, Note, Task } = require('../models');
 const { scoreCompany } = require('./leadScoring');
 const { SCORING_INCLUDE } = require('./companyService');
 const ApiError = require('../utils/ApiError');
@@ -144,7 +144,7 @@ async function setContactStatus(leadId, toContactStatus, { userId, note, method 
 }
 
 /** The [CONTACT] button — always sets CONTACTED regardless of prior state. */
-async function markContacted(leadId, { userId, method, note } = {}) {
+async function markContacted(leadId, { userId, method, note, nextFollowUpAt } = {}) {
   return sequelize.transaction(async (transaction) => {
     const lead = await Lead.findByPk(leadId, { transaction });
     if (!lead) throw ApiError.notFound('Lead not found');
@@ -156,6 +156,7 @@ async function markContacted(leadId, { userId, method, note } = {}) {
     lead.last_contacted_at = new Date();
     lead.ever_contacted = true;
     if (method && Lead.CONTACT_METHODS.includes(method)) lead.contact_method = method;
+    if (nextFollowUpAt) lead.next_follow_up_at = new Date(nextFollowUpAt);
     await lead.save({ transaction });
 
     if (fromContact !== 'CONTACTED') {
@@ -180,6 +181,23 @@ async function markContacted(leadId, { userId, method, note } = {}) {
 
     if (note) {
       await Note.create({ lead_id: lead.id, company_id: lead.company_id, user_id: userId || null, body: note }, { transaction });
+    }
+
+    if (nextFollowUpAt) {
+      await Task.create(
+        {
+          lead_id: lead.id,
+          company_id: lead.company_id,
+          assigned_user_id: userId || null,
+          created_by_user_id: userId || null,
+          title: `Follow up on ${note ? note.slice(0, 60) : 'this contact'}`,
+          due_date: new Date(nextFollowUpAt),
+          is_follow_up: true,
+          follow_up_method: method && Lead.CONTACT_METHODS.includes(method) ? method : null,
+          status: 'TODO',
+        },
+        { transaction }
+      );
     }
 
     return lead;
