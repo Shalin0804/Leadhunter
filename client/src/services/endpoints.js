@@ -85,6 +85,13 @@ export const userApi = {
   list: () => unwrap(api.get('/users')),
 };
 
+export const apolloApi = {
+  status: () => unwrap(api.get('/apollo/status')),
+  search: (body) => unwrap(api.post('/apollo/search', body)),
+  import: (items) => unwrap(api.post('/apollo/import', { items })),
+  enrich: (companyId) => unwrap(api.post(`/apollo/companies/${companyId}/enrich`)),
+};
+
 export const signalApi = {
   list: (params) => unwrap(api.get(`/signals${qs(params)}`)),
   meta: () => unwrap(api.get('/signals/meta')),

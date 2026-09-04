@@ -29,6 +29,15 @@ module.exports = (sequelize) => {
       source: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'csv' },
       is_demo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 
+      // Enrichment (Apollo / future providers)
+      apollo_organization_id: { type: DataTypes.STRING(40), allowNull: true },
+      linkedin_url: { type: DataTypes.STRING(255), allowNull: true },
+      employee_count: { type: DataTypes.INTEGER, allowNull: true },
+      annual_revenue: { type: DataTypes.DECIMAL(16, 2), allowNull: true },
+      founded_year: { type: DataTypes.INTEGER, allowNull: true },
+      enriched_at: { type: DataTypes.DATE, allowNull: true },
+      enrichment_source: { type: DataTypes.STRING(40), allowNull: true },
+
       // Cached latest scoring for fast discovery listing / filtering
       lead_score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       lead_temperature: {
@@ -50,6 +59,7 @@ module.exports = (sequelize) => {
         { fields: ['company_status'] },
         { fields: ['lead_score'] },
         { fields: ['lead_temperature'] },
+        { fields: ['apollo_organization_id'] },
       ],
     }
   );

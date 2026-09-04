@@ -3,6 +3,7 @@ const CsvCompanyProvider = require('./CsvCompanyProvider');
 const CsvSignalProvider = require('./CsvSignalProvider');
 const MCAProvider = require('./MCAProvider');
 const ApiCompanyProvider = require('./ApiCompanyProvider');
+const ApolloCompanyProvider = require('./ApolloCompanyProvider');
 
 // Provider registry — add new sources here.
 const registry = {
@@ -10,6 +11,7 @@ const registry = {
   'signal-csv': new CsvSignalProvider(),
   mca: new MCAProvider(),
   api: new ApiCompanyProvider(),
+  apollo: new ApolloCompanyProvider(),
 };
 
 const getProvider = (key = 'csv') => {
@@ -31,6 +33,7 @@ module.exports = {
   CsvSignalProvider,
   MCAProvider,
   ApiCompanyProvider,
+  ApolloCompanyProvider,
   registry,
   getProvider,
   listProviders,

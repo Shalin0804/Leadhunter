@@ -8,10 +8,12 @@ import {
   FiDownload,
   FiFilter,
   FiX,
+  FiSearch,
 } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
-import { companyApi } from '../services/endpoints';
+import { companyApi, apolloApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
+import ApolloSearchModal from '../components/ApolloSearchModal';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
 import { fmtDate, SIGNAL_SERVICE_LABELS } from '../utils/format';
@@ -33,6 +35,8 @@ export default function Discovery() {
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(true);
   const [modal, setModal] = useState(null); // { type, company }
+  const [showApollo, setShowApollo] = useState(false);
+  const { data: apolloStatus } = useApi(() => apolloApi.status(), []);
 
   const get = (k) => params.get(k) || '';
   const setParam = (k, v) => {
@@ -95,6 +99,13 @@ export default function Discovery() {
         <div className="flex gap-2">
           <button className="btn" onClick={() => setShowFilters((v) => !v)}>
             <FiFilter /> Filters {activeFilterCount > 0 && <span className="badge blue">{activeFilterCount}</span>}
+          </button>
+          <button
+            className="btn"
+            onClick={() => (apolloStatus?.configured ? setShowApollo(true) : toast.error('Apollo is not configured — set APOLLO_API_KEY on the server.'))}
+            title={apolloStatus?.configured ? 'Search Apollo.io for real companies' : 'Apollo not configured'}
+          >
+            <FiSearch /> Search Apollo
           </button>
           <button
             className="btn"
@@ -329,6 +340,7 @@ export default function Discovery() {
         companyId={modal?.company?.id}
         onDone={reload}
       />
+      <ApolloSearchModal open={showApollo} onClose={() => setShowApollo(false)} onImported={reload} />
     </div>
   );
 }

@@ -39,4 +39,9 @@ module.exports = {
     password: env('ADMIN_PASSWORD', 'Admin@123456'),
     name: env('ADMIN_NAME', 'LeadHunter Admin'),
   },
+
+  apollo: {
+    apiKey: env('APOLLO_API_KEY', ''),
+    baseUrl: env('APOLLO_BASE_URL', 'https://api.apollo.io/api/v1'),
+  },
 };

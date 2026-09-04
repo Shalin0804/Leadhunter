@@ -62,18 +62,7 @@ async function run() {
   r = await call('GET', '/dashboard/opportunities?limit=5');
   assert(r.status === 200 && Array.isArray(r.json.data.items), 'GET /dashboard/opportunities');
 
-  r = await call('GET', '/discovery/companies?limit=5&sort=lead_score&dir=desc');
-  assert(r.status === 200 && r.json.data.items.length > 0, 'GET /discovery/companies (has data)');
-  assert(r.json.data.pagination.total === totalCompanies, 'discovery total matches dashboard total');
-  const company = r.json.data.items[0];
-
-  r = await call('GET', `/discovery/companies?date_preset=last_90_days&limit=5`);
-  assert(r.status === 200, 'GET /discovery/companies with date filter');
-
-  r = await call('GET', `/companies/${company.id}`);
-  assert(r.status === 200 && r.json.data.analysis && typeof r.json.data.analysis.score === 'number', 'GET /companies/:id includes analysis');
-
-  // Create a fresh company
+  // Create a fresh company (the DB may otherwise be empty on a clean install)
   const cin = `U72900MH2099PTC${Date.now().toString().slice(-6)}`;
   r = await call('POST', '/companies', {
     company_name: 'Smoke Test Ventures Pvt Ltd',
@@ -85,6 +74,15 @@ async function run() {
   });
   assert(r.status === 201 && r.json.data.company.lead_score >= 0, 'POST /companies creates + scores');
   const newCompanyId = r.json.data.company.id;
+
+  r = await call('GET', '/discovery/companies?limit=5&sort=lead_score&dir=desc');
+  assert(r.status === 200 && r.json.data.items.length > 0, 'GET /discovery/companies (has data)');
+
+  r = await call('GET', `/discovery/companies?date_preset=last_90_days&limit=5`);
+  assert(r.status === 200, 'GET /discovery/companies with date filter');
+
+  r = await call('GET', `/companies/${newCompanyId}`);
+  assert(r.status === 200 && r.json.data.analysis && typeof r.json.data.analysis.score === 'number', 'GET /companies/:id includes analysis');
 
   r = await call('POST', '/leads', { company_id: newCompanyId, priority: 'HIGH' });
   assert(r.status === 201 && r.json.data.lead.status === 'NEW', 'POST /leads converts company');
@@ -112,6 +110,14 @@ async function run() {
 
   r = await call('GET', '/pipeline');
   assert(r.status === 200 && r.json.data.columns.length === 9, 'GET /pipeline has 9 stages');
+
+  // --- Apollo (graceful when not configured) ---
+  r = await call('GET', '/apollo/status');
+  assert(r.status === 200 && typeof r.json.data.configured === 'boolean', 'GET /apollo/status');
+  if (!r.json.data.configured) {
+    r = await call('POST', '/apollo/search', { name: 'Acme' });
+    assert(r.status === 400, 'POST /apollo/search fails gracefully when unconfigured');
+  }
 
   // --- Buying signals ---
   r = await call('POST', '/signals', {

@@ -34,3 +34,6 @@ services:
         sync: false
       - key: ALLOW_VERCEL_PREVIEWS
         value: "true"
+      # Optional — enables live Apollo search + enrichment. Leave unset to disable.
+      - key: APOLLO_API_KEY
+        sync: false

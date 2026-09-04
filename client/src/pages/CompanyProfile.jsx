@@ -12,9 +12,10 @@ import {
   FiGlobe,
   FiMail,
   FiPhone,
+  FiZap,
 } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
-import { companyApi } from '../services/endpoints';
+import { companyApi, apolloApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
@@ -41,7 +42,9 @@ export default function CompanyProfile() {
   const toast = useToast();
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [enriching, setEnriching] = useState(false);
   const { data, loading, error, reload } = useApi(() => companyApi.get(id), [id]);
+  const { data: apolloStatus } = useApi(() => apolloApi.status(), []);
 
   if (loading) return <Loader label="Loading company…" />;
   if (error)
@@ -69,6 +72,23 @@ export default function CompanyProfile() {
     }
   };
 
+  const enrichFromApollo = async () => {
+    if (!company.website) {
+      toast.error('Add a website first — Apollo enrichment matches by domain.');
+      return;
+    }
+    setEnriching(true);
+    try {
+      await apolloApi.enrich(id);
+      toast.success('Enriched from Apollo (1 credit)');
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setEnriching(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -88,6 +108,11 @@ export default function CompanyProfile() {
           <button className="btn" onClick={rescore}>
             <FiRefreshCw /> Rescore
           </button>
+          {apolloStatus?.configured && (
+            <button className="btn" onClick={enrichFromApollo} disabled={enriching} title="Fill phone/industry/size from Apollo.io (1 credit)">
+              <FiZap /> {enriching ? 'Enriching…' : 'Enrich from Apollo'}
+            </button>
+          )}
           <button className="btn" onClick={() => setModal({ type: 'note' })}>
             <FiFileText /> Add note
           </button>
@@ -136,6 +161,13 @@ export default function CompanyProfile() {
                 <Row label="Registered address">{company.registered_address}</Row>
                 <Row label="Authorized capital">{fmtMoney(company.authorized_capital)}</Row>
                 <Row label="Paid-up capital">{fmtMoney(company.paid_up_capital)}</Row>
+                {company.employee_count && <Row label="Employees">{company.employee_count.toLocaleString()}</Row>}
+                {company.annual_revenue && <Row label="Annual revenue">{fmtMoney(company.annual_revenue)}</Row>}
+                {company.enrichment_source && (
+                  <Row label="Data source">
+                    <span className="badge blue">{company.enrichment_source === 'apollo' ? 'Apollo.io' : company.enrichment_source}</span>
+                  </Row>
+                )}
               </dl>
             </Card>
 
@@ -166,13 +198,18 @@ export default function CompanyProfile() {
                   {phones.length ? phones.map((p) => <div key={p.id}><FiPhone style={{ verticalAlign: '-2px' }} /> {p.value}</div>) : <span className="badge warm">None</span>}
                 </Row>
                 <Row label="Social profiles">
+                  {company.linkedin_url && (
+                    <a href={company.linkedin_url} target="_blank" rel="noreferrer" style={{ marginRight: 10 }}>
+                      LinkedIn
+                    </a>
+                  )}
                   {company.socials?.length
                     ? company.socials.map((s) => (
                         <a key={s.id} href={s.url} target="_blank" rel="noreferrer" style={{ marginRight: 10 }}>
                           {titleCase(s.platform)}
                         </a>
                       ))
-                    : <span className="badge warm">None</span>}
+                    : !company.linkedin_url && <span className="badge warm">None</span>}
                 </Row>
               </dl>
             </Card>

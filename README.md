@@ -19,6 +19,23 @@ intelligence are the core of the product — not a generic CRM.
 > official exports (LinkedIn Lead Gen Forms, Meta Lead Ads). It does not collect
 > sensitive personal data and is designed for compliant B2B outreach.
 
+## Apollo.io (live company search + enrichment)
+
+Optional. Set `APOLLO_API_KEY` (Apollo → Settings → Integrations → API) in
+`server/.env` to enable:
+
+- **Search Apollo** on the Company Discovery page — live search of Apollo's
+  company database by name / location / employee count; select results and
+  import them as scored companies (1 Apollo credit per search).
+- **Enrich from Apollo** on a company profile — looks up the company's website
+  domain and fills in phone, industry, employee count, revenue, LinkedIn
+  (1 credit if found, 0 if not).
+
+Without a key, both features stay hidden — nothing else changes.
+`server/providers/ApolloCompanyProvider.js` implements the same
+`CompanyDataProvider` interface as the CSV provider, so swapping in another
+enrichment vendor later is a new provider file, not a rewrite.
+
 ## Buying Signals
 
 Track prospects who have **actively asked** for website / software / CRM work.
