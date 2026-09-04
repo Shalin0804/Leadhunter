@@ -1,7 +1,7 @@
 const config = require('../config/config');
 const { getSettings, updateSettings } = require('../services/automationSettingsService');
 const { runFullDiscovery, runForTarget } = require('../services/discoveryOrchestrator');
-const { reschedule, isRunning } = require('../jobs/automationScheduler');
+const { reschedule, isRunning, withRunLock } = require('../jobs/automationScheduler');
 const { history } = require('../services/apiUsageService');
 const { SearchRun, LeadSource, Lead, Company } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
@@ -23,6 +23,10 @@ exports.updateSettings = async (req, res) => {
 
 // TARGET MODE / MANUAL MODE: run once, right now. Fire-and-forget — discovery
 // can take a while, so the HTTP response doesn't wait for it to finish.
+// Routed through withRunLock (not called directly) so this participates in
+// the SAME concurrency lock as the cron scheduler and the external-cron
+// endpoint below — otherwise `running` never gets set for this path and a
+// second trigger (manual, scheduled, or external) can start concurrently.
 exports.runNow = async (req, res) => {
   if (isRunning()) throw ApiError.conflict('A discovery run is already in progress');
 
@@ -31,19 +35,21 @@ exports.runNow = async (req, res) => {
 
   if (location && industry) {
     // TARGET MODE — a single ad-hoc location+industry pair, outside the saved config.
-    runForTarget({
-      location,
-      industry,
-      providerKey: settings.provider,
-      discoveryProviders: settings.discoveryProviders?.length ? settings.discoveryProviders : [settings.provider],
-      minLeadScore: settings.minLeadScore,
-      dailyLimit: settings.dailyLeadLimit,
-      triggeredBy: 'manual',
-      triggeredByUserId: req.user.id,
-      settings,
-    }).catch((e) => console.error('[automation] target run failed:', e.message));
+    withRunLock('manual', () =>
+      runForTarget({
+        location,
+        industry,
+        providerKey: settings.provider,
+        discoveryProviders: settings.discoveryProviders?.length ? settings.discoveryProviders : [settings.provider],
+        minLeadScore: settings.minLeadScore,
+        dailyLimit: settings.dailyLeadLimit,
+        triggeredBy: 'manual',
+        triggeredByUserId: req.user.id,
+        settings,
+      })
+    ).catch((e) => console.error('[automation] target run failed:', e.message));
   } else {
-    runFullDiscovery({ triggeredBy: 'manual', triggeredByUserId: req.user.id }).catch((e) =>
+    withRunLock('manual', () => runFullDiscovery({ triggeredBy: 'manual', triggeredByUserId: req.user.id })).catch((e) =>
       console.error('[automation] manual run failed:', e.message)
     );
   }
@@ -51,7 +57,9 @@ exports.runNow = async (req, res) => {
   return ok(res, { message: 'Discovery run started. Check Search History for progress.' }, 202);
 };
 
-// External-cron entry point — no user session, just a shared secret.
+// External-cron entry point — no user session, just a shared secret. Safe to
+// call repeatedly/overlapping: withRunLock rejects a second run while one is
+// in progress, same as the manual and in-process-scheduled triggers.
 exports.runScheduled = async (req, res) => {
   if (!config.automation.triggerSecret) {
     throw ApiError.badRequest('AUTOMATION_TRIGGER_SECRET is not configured on the server');
@@ -60,7 +68,9 @@ exports.runScheduled = async (req, res) => {
   if (provided !== config.automation.triggerSecret) throw ApiError.unauthorized('Invalid automation trigger secret');
   if (isRunning()) return ok(res, { message: 'A run is already in progress — skipped.' });
 
-  runFullDiscovery({ triggeredBy: 'external' }).catch((e) => console.error('[automation] external run failed:', e.message));
+  withRunLock('external', () => runFullDiscovery({ triggeredBy: 'external' })).catch((e) =>
+    console.error('[automation] external run failed:', e.message)
+  );
   return ok(res, { message: 'Discovery run started.' }, 202);
 };
 

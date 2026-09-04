@@ -177,7 +177,7 @@ function scoreCompany(company) {
   const s = extractSignals(company);
   const opportunities = detectOpportunities({
     industry: s.industry,
-    websiteAudit: { status: s.websiteStatus, health: s.websiteHealth, isMobileFriendly: undefined },
+    websiteAudit: { status: s.websiteStatus, health: s.websiteHealth, isMobileFriendly: undefined, featureFlags: s.websiteFeatureFlags },
   });
 
   const categories = {

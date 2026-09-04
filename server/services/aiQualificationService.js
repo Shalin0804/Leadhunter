@@ -29,6 +29,20 @@ function industryNoun(industry) {
 
 const BOOKING_NOUN = { restaurant: 'reservations and customer enquiries', hotel: 'bookings and guest enquiries' };
 
+// opportunityDetectionService records "Industry match: X" as an opportunity's
+// reason whenever it was added purely from an industry rule (the overwhelming
+// majority of cases) — that's meaningful internally, but reused verbatim as
+// "the gap" in a sentence it reads as confusing non-sequitur ("...but industry
+// match: Restaurants."). When the reason is that generic marker, describe the
+// gap by the opportunity's own label instead; otherwise the reason is already
+// specific (e.g. "Website is not mobile-responsive") and is used as-is.
+const GENERIC_REASON_RE = /^Industry match:/i;
+function describeGap(topOpportunity) {
+  const reason = topOpportunity.reasons?.[0];
+  if (reason && !GENERIC_REASON_RE.test(reason)) return reason.replace(/^./, (c) => c.toLowerCase());
+  return `no ${topOpportunity.label.toLowerCase()} was detected on their site`;
+}
+
 function qualify({ company, scoring, opportunities, websiteAudit }) {
   const name = company.company_name || 'This business';
   const noun = industryNoun(company.industry);
@@ -61,13 +75,13 @@ function qualify({ company, scoring, opportunities, websiteAudit }) {
   } else if (websiteAudit && ['poor', 'outdated'].includes(websiteAudit.health)) {
     problem = `${name}'s current website is outdated/underperforming (health: "${websiteAudit.health}"), which likely hurts conversion and mobile visitors.`;
   } else if (topOpportunity) {
-    problem = `${name} has a website, but ${(topOpportunity.reasons[0] || `a gap was found in ${topOpportunity.label.toLowerCase()}`).replace(/^./, (c) => c.toLowerCase())}.`;
+    problem = `${name} has a website, but ${describeGap(topOpportunity)}.`;
   } else {
     problem = `${noun.replace(/^./, (c) => c.toUpperCase())} businesses like ${name} typically have room to improve digital operations (booking, CRM, or automation).`;
   }
 
   const salesAngle = topOpportunity
-    ? `Lead with ${topOpportunity.label} for ${name} — ${topOpportunity.reasons[0]}.`
+    ? `Lead with ${topOpportunity.label} for ${name} — ${describeGap(topOpportunity)}.`
     : `Lead with a free digital-presence audit for ${name}.`;
 
   let suggestedOutreach;

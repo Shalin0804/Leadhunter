@@ -39,8 +39,11 @@ function recommendService(c = {}) {
   if (!hasWebsite) return industryService || 'Website Development';
   if (poorWebsite) return industryService ? `Website Redesign (${industryService})` : 'Website Redesign';
 
-  // Has a decent website already — upsell based on industry / digital growth.
-  return industryService || 'Digital Growth / SEO & Marketing';
+  // Has a decent (good/excellent) website already — the industry labels above
+  // ("Restaurant Website / Booking System", etc.) say "you need this built",
+  // which would be false here. Recommend an honest upsell instead of reusing
+  // the same "you don't have one" label for a business that already does.
+  return 'Digital Growth / SEO & Marketing';
 }
 
 module.exports = { recommendService, matchIndustry };

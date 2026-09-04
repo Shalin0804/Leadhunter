@@ -29,23 +29,39 @@ function cronExpressionFor(settings) {
   return CRON_EXPRESSIONS[settings.schedule] || CRON_EXPRESSIONS.daily_9am;
 }
 
-async function fire(triggeredBy = 'scheduled') {
+/**
+ * The single concurrency gate for every way a discovery run can start
+ * (in-process cron, manual "Run Now", and the external-cron-secured
+ * /api/automation/run-scheduled endpoint) — all three MUST go through this,
+ * not call runFullDiscovery/runForTarget directly, or `running` never gets
+ * set and a second overlapping trigger runs concurrently uncontested.
+ *
+ * The isRunning() check-and-set below is synchronous (no `await` between
+ * them), so it's race-free even against two requests arriving back-to-back —
+ * Node only yields the event loop at an `await`/I-O point, and there isn't
+ * one until after `running` is already true.
+ */
+async function withRunLock(triggeredBy, task) {
   if (running) {
-    console.log('[automation] a run is already in progress — skipping this trigger');
-    return { skipped: true };
+    console.log(`[automation] a run is already in progress — ${triggeredBy} trigger skipped`);
+    return { skipped: true, message: 'A run is already in progress — skipped.' };
   }
   running = true;
   try {
     console.log(`[automation] starting ${triggeredBy} discovery run`);
-    const result = await runFullDiscovery({ triggeredBy });
-    console.log(`[automation] run complete: ${result.runs?.length || 0} target(s) processed`);
+    const result = await task();
+    console.log(`[automation] ${triggeredBy} run complete`);
     return result;
   } catch (err) {
-    console.error('[automation] run failed:', err.message);
+    console.error(`[automation] ${triggeredBy} run failed:`, err.message);
     return { error: err.message };
   } finally {
     running = false;
   }
+}
+
+async function fire(triggeredBy = 'scheduled') {
+  return withRunLock(triggeredBy, () => runFullDiscovery({ triggeredBy }));
 }
 
 /**
@@ -104,4 +120,4 @@ async function reschedule() {
   console.log(`[automation] scheduler active: "${expr}" (${settings.schedule})`);
 }
 
-module.exports = { reschedule, fire, isRunning: () => running, nextRunEstimate };
+module.exports = { reschedule, fire, withRunLock, isRunning: () => running, nextRunEstimate };
