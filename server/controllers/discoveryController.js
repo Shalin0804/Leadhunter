@@ -5,6 +5,9 @@ const { buildCompanyWhere, buildOrder } = require('../utils/companyQuery');
 
 const COUNT = [fn('COUNT', col('id')), 'DESC'];
 
+// Postgres returns COUNT() as a string; MySQL as a number. Normalize.
+const numifyCount = (rows) => rows.map((r) => ({ ...r, count: Number(r.count) }));
+
 exports.companies = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const where = buildCompanyWhere(req.query);
@@ -59,9 +62,9 @@ exports.stats = async (req, res) => {
   return ok(res, {
     total,
     newCompanies,
-    byIndustry,
-    byState,
-    byTemperature,
-    byDay,
+    byIndustry: numifyCount(byIndustry),
+    byState: numifyCount(byState),
+    byTemperature: numifyCount(byTemperature),
+    byDay: numifyCount(byDay),
   });
 };

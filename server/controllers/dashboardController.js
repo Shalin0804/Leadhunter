@@ -5,6 +5,14 @@ const { ok } = require('../utils/http');
 const LeadModel = Lead;
 const COUNT_DESC = [fn('COUNT', col('id')), 'DESC'];
 
+// Postgres returns COUNT()/SUM() as strings; MySQL as numbers. Normalize.
+const numify = (rows, ...fields) =>
+  rows.map((r) => {
+    const out = { ...r };
+    for (const f of fields) if (out[f] !== undefined && out[f] !== null) out[f] = Number(out[f]);
+    return out;
+  });
+
 // Portable "bucket the lead score" expression (raw column name is identical on both dialects).
 const SCORE_BUCKET =
   "CASE WHEN lead_score >= 90 THEN '90-100' WHEN lead_score >= 75 THEN '75-89' " +
@@ -41,46 +49,45 @@ exports.stats = async (req, res) => {
     Lead.count(),
   ]);
 
-  // charts
-  const newByDay = await Company.findAll({
-    where: { date_of_incorporation: { [Op.gte]: daysAgoISO(60).toISOString().slice(0, 10) } },
-    attributes: [['date_of_incorporation', 'day'], [fn('COUNT', col('id')), 'count']],
-    group: ['date_of_incorporation'],
-    order: [['date_of_incorporation', 'ASC']],
-    raw: true,
-  });
+  // charts — run in parallel
+  const [newByDay, byIndustry, byState, scoreBucketsRaw, pipeline] = await Promise.all([
+    Company.findAll({
+      where: { date_of_incorporation: { [Op.gte]: daysAgoISO(60).toISOString().slice(0, 10) } },
+      attributes: [['date_of_incorporation', 'day'], [fn('COUNT', col('id')), 'count']],
+      group: ['date_of_incorporation'],
+      order: [['date_of_incorporation', 'ASC']],
+      raw: true,
+    }),
+    Company.findAll({
+      attributes: ['industry', [fn('COUNT', col('id')), 'count']],
+      group: ['industry'],
+      order: [COUNT_DESC],
+      limit: 10,
+      raw: true,
+    }),
+    Company.findAll({
+      attributes: ['state', [fn('COUNT', col('id')), 'count']],
+      group: ['state'],
+      order: [COUNT_DESC],
+      limit: 10,
+      raw: true,
+    }),
+    Company.findAll({
+      attributes: [[literal(SCORE_BUCKET), 'bucket'], [fn('COUNT', col('id')), 'count']],
+      group: [literal(SCORE_BUCKET)],
+      raw: true,
+    }),
+    Lead.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count'], [fn('COALESCE', fn('SUM', col('estimated_value')), 0), 'value']],
+      group: ['status'],
+      raw: true,
+    }),
+  ]);
 
-  const byIndustry = await Company.findAll({
-    attributes: ['industry', [fn('COUNT', col('id')), 'count']],
-    group: ['industry'],
-    order: [COUNT_DESC],
-    limit: 10,
-    raw: true,
-  });
-
-  const byState = await Company.findAll({
-    attributes: ['state', [fn('COUNT', col('id')), 'count']],
-    group: ['state'],
-    order: [COUNT_DESC],
-    limit: 10,
-    raw: true,
-  });
-
-  const scoreBucketsRaw = await Company.findAll({
-    attributes: [[literal(SCORE_BUCKET), 'bucket'], [fn('COUNT', col('id')), 'count']],
-    group: [literal(SCORE_BUCKET)],
-    raw: true,
-  });
   const scoreBuckets = ['0-29', '30-49', '50-74', '75-89', '90-100'].map((b) => ({
     bucket: b,
     count: Number(scoreBucketsRaw.find((r) => r.bucket === b)?.count || 0),
   }));
-
-  const pipeline = await Lead.findAll({
-    attributes: ['status', [fn('COUNT', col('id')), 'count'], [fn('COALESCE', fn('SUM', col('estimated_value')), 0), 'value']],
-    group: ['status'],
-    raw: true,
-  });
 
   const conversionRate = totalLeads ? Math.round((wonLeads / totalLeads) * 1000) / 10 : 0;
 
@@ -98,9 +105,9 @@ exports.stats = async (req, res) => {
       lostLeads,
     },
     charts: {
-      newByDay,
-      byIndustry,
-      byState,
+      newByDay: numify(newByDay, 'count'),
+      byIndustry: numify(byIndustry, 'count'),
+      byState: numify(byState, 'count'),
       scoreBuckets,
       pipeline: LeadModel.STATUSES.map((s) => {
         const row = pipeline.find((p) => p.status === s);

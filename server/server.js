@@ -5,8 +5,11 @@ const { sequelize } = require('./models');
 async function start() {
   try {
     await sequelize.authenticate();
+    const target = config.db.url
+      ? `${config.db.dialect} (DATABASE_URL)`
+      : `${config.db.dialect} ${config.db.name}@${config.db.host}:${config.db.port}`;
     // eslint-disable-next-line no-console
-    console.log(`[db] connected to ${config.db.name}@${config.db.host}:${config.db.port}`);
+    console.log(`[db] connected — ${target}`);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[db] connection failed:', err.message);
