@@ -37,8 +37,14 @@ function extractSignals(company) {
 
   const activeSignals = signals.filter((s) => config.activeSignalStatuses.includes(s.status));
 
-  const primaryWebsite = websites[0];
-  const hasWebsite = !!(primaryWebsite || plain.website || plain.has_website);
+  // A CompanyWebsite row can exist purely to carry an audit result for a business
+  // that has NO website (status: 'no_website', url is a placeholder) — its mere
+  // existence must not be read as "has a website".
+  const realWebsites = websites.filter((w) => w.status !== 'no_website');
+  const primaryWebsite = realWebsites[0];
+  // An audit explicitly ran and found nothing — trust that over stale denormalized flags.
+  const noWebsiteConfirmed = websites.length > 0 && realWebsites.length === 0;
+  const hasWebsite = !noWebsiteConfirmed && !!(primaryWebsite || plain.website || plain.has_website);
   const websiteStatus = primaryWebsite?.status || (hasWebsite ? 'unknown' : 'no_website');
   const websiteHealth = primaryWebsite?.health || 'unknown';
 
@@ -52,6 +58,7 @@ function extractSignals(company) {
   return {
     industry: plain.industry,
     state: plain.state,
+    city: plain.city,
     dateOfIncorporation: plain.date_of_incorporation ? new Date(plain.date_of_incorporation) : null,
     hasWebsite,
     websiteStatus,
@@ -93,7 +100,7 @@ function scoreCompany(company) {
   add('activeBuyingSignal', s.hasActiveSignal);
   add('recentlyRegistered', isRecent);
   add('targetIndustry', containsAny(s.industry, config.targetIndustries));
-  add('targetLocation', containsAny(s.state, config.targetLocations));
+  add('targetLocation', containsAny(s.state, config.targetLocations) || containsAny(s.city, config.targetLocations));
   add('noWebsite', !s.hasWebsite);
   add('poorWebsite', poorWebsite);
   add('publicBusinessEmail', s.hasPublicBusinessEmail);
