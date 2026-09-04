@@ -1,4 +1,4 @@
-const { Company, CompanyContact, CompanyWebsite, CompanySocial, LeadScore, Lead } = require('../models');
+const { Company, CompanyContact, CompanyWebsite, CompanySocial, LeadScore, Lead, Signal } = require('../models');
 const { scoreCompany } = require('./leadScoring');
 
 const PRESENCE_INCLUDE = [
@@ -6,6 +6,9 @@ const PRESENCE_INCLUDE = [
   { model: CompanyWebsite, as: 'websites' },
   { model: CompanySocial, as: 'socials' },
 ];
+
+// Everything the scoring engine needs (presence + active buying signals).
+const SCORING_INCLUDE = [...PRESENCE_INCLUDE, { model: Signal, as: 'signals' }];
 
 async function loadCompanyWithPresence(id, options = {}) {
   return Company.findByPk(id, { include: PRESENCE_INCLUDE, ...options });
@@ -30,7 +33,7 @@ async function syncPresenceFlags(company, { transaction } = {}) {
  * Also propagates the score to an existing lead if one exists.
  */
 async function rescoreCompany(companyId, { transaction, leadId } = {}) {
-  const company = await Company.findByPk(companyId, { include: PRESENCE_INCLUDE, transaction });
+  const company = await Company.findByPk(companyId, { include: SCORING_INCLUDE, transaction });
   if (!company) return null;
 
   const result = scoreCompany(company);
@@ -69,4 +72,4 @@ async function rescoreCompany(companyId, { transaction, leadId } = {}) {
   return { company, result };
 }
 
-module.exports = { loadCompanyWithPresence, syncPresenceFlags, rescoreCompany, PRESENCE_INCLUDE };
+module.exports = { loadCompanyWithPresence, syncPresenceFlags, rescoreCompany, PRESENCE_INCLUDE, SCORING_INCLUDE };

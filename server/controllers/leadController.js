@@ -8,6 +8,7 @@ const {
   Note,
   LeadStatusHistory,
   LeadScore,
+  Signal,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const { likeOp } = require('../utils/dialect');
@@ -143,8 +144,12 @@ exports.get = async (req, res) => {
     include: [{ model: User, as: 'user', attributes: ['id', 'name'] }],
     order: [['created_at', 'DESC']],
   });
+  const signals = await Signal.findAll({
+    where: { [Op.or]: [{ lead_id: lead.id }, { company_id: lead.company_id }] },
+    order: [['captured_at', 'DESC']],
+  });
 
-  return ok(res, { lead, activities, tasks, notes });
+  return ok(res, { lead, activities, tasks, notes, signals });
 };
 
 exports.createFromCompany = async (req, res) => {

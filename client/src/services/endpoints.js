@@ -84,3 +84,25 @@ export const importApi = {
 export const userApi = {
   list: () => unwrap(api.get('/users')),
 };
+
+export const signalApi = {
+  list: (params) => unwrap(api.get(`/signals${qs(params)}`)),
+  meta: () => unwrap(api.get('/signals/meta')),
+  stats: () => unwrap(api.get('/signals/stats')),
+  get: (id) => unwrap(api.get(`/signals/${id}`)),
+  create: (body) => unwrap(api.post('/signals', body)),
+  update: (id, body) => unwrap(api.patch(`/signals/${id}`, body)),
+  convert: (id, body) => unwrap(api.post(`/signals/${id}/convert`, body)),
+  remove: (id) => unwrap(api.delete(`/signals/${id}`)),
+  exportCsv: (params) => downloadFile(`/signals/export${qs(params)}`, 'signals.csv'),
+  previewImport: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return unwrap(api.post('/imports/signals/preview', fd));
+  },
+  runImport: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return unwrap(api.post('/imports/signals', fd));
+  },
+};

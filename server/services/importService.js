@@ -1,6 +1,7 @@
-const { sequelize, Company, CompanyContact, CompanyWebsite, CompanyImport, CompanyImportError, Activity } = require('../models');
+const { sequelize, Company, CompanyContact, CompanyWebsite, CompanyImport, CompanyImportError, Activity, Signal } = require('../models');
 const { getProvider } = require('../providers');
 const { rescoreCompany } = require('./companyService');
+const { createSignal } = require('./signalService');
 const { Op } = require('sequelize');
 
 /**
@@ -245,4 +246,123 @@ async function runImport({ providerKey = 'csv', fileBuffer, originalFilename, us
   return CompanyImport.findByPk(importRow.id, { include: [{ model: CompanyImportError, as: 'errors' }] });
 }
 
-module.exports = { analyze, runImport, detectDuplicates };
+/* -------------------- Buying-signal CSV import -------------------- */
+
+async function analyzeSignals({ fileBuffer }) {
+  const provider = getProvider('signal-csv');
+  const parsed = provider.parse(fileBuffer);
+
+  if (!parsed.requiredPresent) {
+    return {
+      ok: false,
+      message: 'CSV needs at least a company_name, website or contact_email column',
+      headerMap: parsed.headerMap,
+      unknownHeaders: parsed.unknownHeaders,
+    };
+  }
+
+  const { records, errors } = await provider.importCompanies(parsed.rows);
+
+  const preview = records.slice(0, 25).map((r) => ({
+    row_number: r.rowNumber,
+    company_name: r.value.company_name || r.value.website || r.value.contact_email,
+    service: r.value.service,
+    source: r.value.source,
+    headline: r.value.headline,
+    contact_name: r.value.contact_name,
+  }));
+
+  return {
+    ok: true,
+    headerMap: parsed.headerMap,
+    unknownHeaders: parsed.unknownHeaders,
+    totals: {
+      total_records: parsed.rows.length,
+      valid_records: records.length,
+      invalid_records: parsed.rows.length - records.length,
+    },
+    preview,
+    errors: errors.slice(0, 200),
+  };
+}
+
+async function runSignalImport({ fileBuffer, originalFilename, userId }) {
+  const provider = getProvider('signal-csv');
+  const parsed = provider.parse(fileBuffer);
+
+  const importRow = await CompanyImport.create({
+    user_id: userId || null,
+    provider: 'signal-csv',
+    original_filename: originalFilename || null,
+    status: 'pending',
+    total_records: parsed.rows.length,
+  });
+
+  if (!parsed.requiredPresent) {
+    await importRow.update({ status: 'failed', summary: { message: 'No identifying column' } });
+    return CompanyImport.findByPk(importRow.id, { include: [{ model: CompanyImportError, as: 'errors' }] });
+  }
+
+  const { records, errors } = await provider.importCompanies(parsed.rows);
+  const errorRows = [...errors];
+  let createdSignals = 0;
+  let newCompanies = 0;
+  let matchedCompanies = 0;
+
+  for (const rec of records) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { companyCreated } = await createSignal(
+        { ...rec.value, import_id: importRow.id, raw: rec.value.raw },
+        { userId }
+      );
+      createdSignals += 1;
+      if (companyCreated) newCompanies += 1;
+      else matchedCompanies += 1;
+    } catch (e) {
+      errorRows.push({ row_number: rec.rowNumber, field: null, message: e.message, raw_row: rec.value.raw });
+    }
+  }
+
+  if (errorRows.length) {
+    await CompanyImportError.bulkCreate(
+      errorRows.map((e) => ({
+        import_id: importRow.id,
+        row_number: e.row_number || null,
+        field: e.field || null,
+        message: e.message,
+        raw_row: e.raw_row || null,
+      }))
+    );
+  }
+
+  const summary = {
+    total_records: parsed.rows.length,
+    signals_created: createdSignals,
+    companies_matched: matchedCompanies,
+    companies_created: newCompanies,
+    invalid_records: parsed.rows.length - records.length,
+    error_rows: errorRows.length,
+  };
+
+  await importRow.update({
+    status: 'completed',
+    imported_count: createdSignals,
+    updated_count: matchedCompanies,
+    duplicate_count: 0,
+    invalid_count: parsed.rows.length - records.length,
+    summary,
+  });
+
+  await Activity.create({
+    user_id: userId || null,
+    type: 'import',
+    title: `Buying-signals import: ${originalFilename || 'upload'}`,
+    body: `${createdSignals} signals, ${newCompanies} new companies, ${matchedCompanies} matched`,
+    meta: summary,
+  });
+
+  return CompanyImport.findByPk(importRow.id, { include: [{ model: CompanyImportError, as: 'errors' }] });
+}
+
+module.exports = { analyze, runImport, detectDuplicates, analyzeSignals, runSignalImport };

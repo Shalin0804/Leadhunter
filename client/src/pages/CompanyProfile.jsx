@@ -18,7 +18,15 @@ import { companyApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
-import { fmtDate, fmtDateTime, fmtMoney, fmtRelative, titleCase } from '../utils/format';
+import {
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtRelative,
+  titleCase,
+  SIGNAL_SERVICE_LABELS,
+  SIGNAL_SOURCE_LABELS,
+} from '../utils/format';
 
 const Row = ({ label, children }) => (
   <>
@@ -45,6 +53,8 @@ export default function CompanyProfile() {
 
   const { company, analysis, activities, notes } = data;
   const lead = company.leads?.[0];
+  const signals = company.signals || [];
+  const activeSignals = signals.filter((s) => ['NEW', 'REVIEWED'].includes(s.status));
   const website = company.websites?.[0];
   const emails = (company.contacts || []).filter((c) => c.type === 'email');
   const phones = (company.contacts || []).filter((c) => c.type === 'phone');
@@ -209,6 +219,38 @@ export default function CompanyProfile() {
                 )}
               </ul>
             </Card>
+
+            {signals.length > 0 && (
+              <Card title={`Buying Signals (${signals.length})`}>
+                {activeSignals.length > 0 && (
+                  <div className="badge blue mb-3" style={{ display: 'inline-flex' }}>
+                    {activeSignals.length} active — boosting the lead score
+                  </div>
+                )}
+                <div className="timeline mt-2">
+                  {signals.map((s) => (
+                    <div className="timeline-item" key={s.id}>
+                      <div className="t-title">
+                        {SIGNAL_SERVICE_LABELS[s.service] || s.service}{' '}
+                        <span className={`badge ${['NEW', 'REVIEWED'].includes(s.status) ? 'blue' : 'gray'}`}>
+                          {titleCase(s.status)}
+                        </span>
+                      </div>
+                      <div className="t-meta">
+                        via {SIGNAL_SOURCE_LABELS[s.source] || s.source} · {fmtRelative(s.captured_at)}
+                        {s.source_url && (
+                          <>
+                            {' · '}
+                            <a href={s.source_url} target="_blank" rel="noreferrer">source</a>
+                          </>
+                        )}
+                      </div>
+                      {(s.headline || s.detail) && <div className="t-body">{s.headline || s.detail}</div>}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             <Card title="CRM Information">
               {lead ? (

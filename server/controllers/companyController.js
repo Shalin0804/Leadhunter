@@ -10,10 +10,11 @@ const {
   Note,
   Task,
   User,
+  Signal,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
-const { buildCompanyWhere, buildOrder } = require('../utils/companyQuery');
+const { buildCompanyWhere, buildOrder, applySignalFilter } = require('../utils/companyQuery');
 const { rescoreCompany, PRESENCE_INCLUDE } = require('../services/companyService');
 const { scoreCompany } = require('../services/leadScoring');
 const { sendCsv } = require('../utils/csv');
@@ -27,7 +28,7 @@ const EXPORT_COLUMNS = [
 
 exports.list = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
-  const where = buildCompanyWhere(req.query);
+  const where = await applySignalFilter(buildCompanyWhere(req.query), req.query, Signal);
   const order = buildOrder(req.query);
 
   const { rows, count } = await Company.findAndCountAll({ where, order, limit, offset });
@@ -35,7 +36,7 @@ exports.list = async (req, res) => {
 };
 
 exports.exportCsv = async (req, res) => {
-  const where = buildCompanyWhere(req.query);
+  const where = await applySignalFilter(buildCompanyWhere(req.query), req.query, Signal);
   const order = buildOrder(req.query);
   const rows = await Company.findAll({ where, order, limit: 5000 });
   const plain = rows.map((r) => {
@@ -51,6 +52,7 @@ exports.get = async (req, res) => {
       { model: CompanyContact, as: 'contacts' },
       { model: CompanyWebsite, as: 'websites' },
       { model: CompanySocial, as: 'socials' },
+      { model: Signal, as: 'signals', separate: true, order: [['captured_at', 'DESC']] },
       {
         model: Lead,
         as: 'leads',

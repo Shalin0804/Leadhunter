@@ -83,4 +83,31 @@ function buildOrder(q = {}) {
   return [[field, dir], ['id', 'DESC']];
 }
 
-module.exports = { buildCompanyWhere, buildOrder, DATE_PRESETS };
+/**
+ * When the query asks for a signal filter, return the set of company ids that
+ * have a matching signal (to AND into the main where). Returns null if no
+ * signal filter was requested.
+ */
+async function signalCompanyIds(q = {}, Signal) {
+  if (!Signal) return null;
+  const wantsSignal = q.has_signal === 'true' || q.has_signal === '1';
+  const service = q.wants_service;
+  const source = q.signal_source;
+  if (!wantsSignal && !service && !source) return null;
+
+  const where = {};
+  if (wantsSignal) where.status = { [Op.in]: ['NEW', 'REVIEWED'] };
+  if (service) where.service = service;
+  if (source) where.source = source;
+
+  const rows = await Signal.findAll({ where, attributes: ['company_id'], group: ['company_id'], raw: true });
+  return rows.map((r) => r.company_id).filter(Boolean);
+}
+
+async function applySignalFilter(where, q, Signal) {
+  const ids = await signalCompanyIds(q, Signal);
+  if (ids === null) return where;
+  return { ...where, id: ids.length ? { [Op.in]: ids } : -1 };
+}
+
+module.exports = { buildCompanyWhere, buildOrder, signalCompanyIds, applySignalFilter, DATE_PRESETS };

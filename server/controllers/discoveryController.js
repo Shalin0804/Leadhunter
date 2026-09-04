@@ -1,7 +1,7 @@
 const { fn, col, Op } = require('sequelize');
-const { Company } = require('../models');
+const { Company, Signal } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
-const { buildCompanyWhere, buildOrder } = require('../utils/companyQuery');
+const { buildCompanyWhere, buildOrder, applySignalFilter } = require('../utils/companyQuery');
 
 const COUNT = [fn('COUNT', col('id')), 'DESC'];
 
@@ -10,7 +10,7 @@ const numifyCount = (rows) => rows.map((r) => ({ ...r, count: Number(r.count) })
 
 exports.companies = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
-  const where = buildCompanyWhere(req.query);
+  const where = await applySignalFilter(buildCompanyWhere(req.query), req.query, Signal);
   const order = buildOrder(req.query);
   const { rows, count } = await Company.findAndCountAll({ where, order, limit, offset });
   return ok(res, paginated(rows, count, page, limit));

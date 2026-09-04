@@ -22,5 +22,7 @@ router.get('/:id', asyncHandler(ctrl.get));
 router.get('/:id/errors.csv', asyncHandler(ctrl.errorsCsv));
 router.post('/companies/preview', upload.single('file'), asyncHandler(ctrl.preview));
 router.post('/companies', upload.single('file'), asyncHandler(ctrl.create));
+router.post('/signals/preview', upload.single('file'), asyncHandler(ctrl.previewSignals));
+router.post('/signals', upload.single('file'), asyncHandler(ctrl.createSignals));
 
 module.exports = router;

@@ -14,6 +14,7 @@ const Note = require('./Note')(sequelize);
 const Setting = require('./Setting')(sequelize);
 const CompanyImport = require('./CompanyImport')(sequelize);
 const CompanyImportError = require('./CompanyImportError')(sequelize);
+const Signal = require('./Signal')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -69,6 +70,13 @@ Company.hasMany(Note, { as: 'notes', foreignKey: 'company_id', onDelete: 'CASCAD
 Note.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
 Note.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
+// Signals (buying intent)
+Company.hasMany(Signal, { as: 'signals', foreignKey: 'company_id', onDelete: 'CASCADE' });
+Signal.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
+Lead.hasMany(Signal, { as: 'signals', foreignKey: 'lead_id' });
+Signal.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id' });
+Signal.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id' });
+
 // Imports
 User.hasMany(CompanyImport, { as: 'imports', foreignKey: 'user_id' });
 CompanyImport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -92,6 +100,7 @@ const db = {
   Setting,
   CompanyImport,
   CompanyImportError,
+  Signal,
 };
 
 module.exports = db;

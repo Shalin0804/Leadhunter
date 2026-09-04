@@ -1,12 +1,12 @@
 const { sequelize, Company, Lead, LeadStatusHistory, Activity } = require('../models');
 const { scoreCompany } = require('./leadScoring');
-const { PRESENCE_INCLUDE } = require('./companyService');
+const { SCORING_INCLUDE } = require('./companyService');
 const ApiError = require('../utils/ApiError');
 
 /** Convert a company into a lead (or return the existing one). */
 async function convertCompanyToLead(companyId, { userId, assignedUserId, priority, estimatedValue } = {}) {
   return sequelize.transaction(async (transaction) => {
-    const company = await Company.findByPk(companyId, { include: PRESENCE_INCLUDE, transaction });
+    const company = await Company.findByPk(companyId, { include: SCORING_INCLUDE, transaction });
     if (!company) throw ApiError.notFound('Company not found');
 
     const existing = await Lead.findOne({ where: { company_id: companyId }, transaction });

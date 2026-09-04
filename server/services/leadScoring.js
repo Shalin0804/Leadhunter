@@ -33,6 +33,9 @@ function extractSignals(company) {
   const websites = plain.websites || [];
   const contacts = plain.contacts || [];
   const socials = plain.socials || [];
+  const signals = plain.signals || [];
+
+  const activeSignals = signals.filter((s) => config.activeSignalStatuses.includes(s.status));
 
   const primaryWebsite = websites[0];
   const hasWebsite = !!(primaryWebsite || plain.website || plain.has_website);
@@ -57,6 +60,9 @@ function extractSignals(company) {
     hasPublicBusinessEmail,
     hasPhone,
     hasSocial,
+    activeSignals,
+    hasActiveSignal: activeSignals.length > 0,
+    requestedServices: [...new Set(activeSignals.map((x) => x.service).filter(Boolean))],
   };
 }
 
@@ -84,6 +90,7 @@ function scoreCompany(company) {
   const poorWebsite =
     s.hasWebsite && ['poor', 'outdated', 'fair'].includes(String(s.websiteHealth).toLowerCase());
 
+  add('activeBuyingSignal', s.hasActiveSignal);
   add('recentlyRegistered', isRecent);
   add('targetIndustry', containsAny(s.industry, config.targetIndustries));
   add('targetLocation', containsAny(s.state, config.targetLocations));
@@ -106,20 +113,34 @@ function scoreCompany(company) {
   if (!s.hasPhone) missingAssets.push('Business phone');
   if (!s.hasSocial) missingAssets.push('Social media presence');
 
-  const recommendedService = recommendService({
-    industry: s.industry,
-    hasWebsite: s.hasWebsite,
-    websiteHealth: s.websiteHealth,
-    hasEmail: s.hasEmail,
-    hasPhone: s.hasPhone,
-    hasSocial: s.hasSocial,
-  });
+  // A prospect who explicitly asked for a service wins over the inferred one.
+  const requestedLabel = s.requestedServices
+    .map((svc) => config.signalServiceLabels[svc])
+    .find(Boolean);
+
+  const recommendedService =
+    requestedLabel ||
+    recommendService({
+      industry: s.industry,
+      hasWebsite: s.hasWebsite,
+      websiteHealth: s.websiteHealth,
+      hasEmail: s.hasEmail,
+      hasPhone: s.hasPhone,
+      hasSocial: s.hasSocial,
+    });
+
+  if (s.hasActiveSignal) {
+    const srcs = [...new Set(s.activeSignals.map((x) => x.source))].join(', ');
+    reasons.unshift(`Asked for ${requestedLabel || 'a service'} via ${srcs}`);
+  }
 
   return {
     score,
     temperature,
     opportunityLevel,
     recommendedService,
+    requestedServices: s.requestedServices,
+    hasActiveSignal: s.hasActiveSignal,
     breakdown,
     reasons,
     missingAssets,

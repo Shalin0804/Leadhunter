@@ -11,6 +11,7 @@ const db = require('../models');
 const { companies: DEMO, T, CAT, daysAgo } = require('./demoData');
 const { rescoreCompany } = require('../services/companyService');
 const { convertCompanyToLead, changeLeadStatus } = require('../services/leadService');
+const { createSignal } = require('../services/signalService');
 
 const {
   sequelize,
@@ -24,6 +25,7 @@ const {
   Note,
   Activity,
   Setting,
+  Signal,
 } = db;
 
 const WIPE = process.argv.includes('--wipe');
@@ -73,6 +75,7 @@ async function wipeDemo() {
   if (ids.length) {
     const leads = await Lead.findAll({ where: { company_id: ids }, attributes: ['id'] });
     const leadIds = leads.map((l) => l.id);
+    await Signal.destroy({ where: { company_id: ids } });
     await Task.destroy({ where: { [db.Sequelize.Op.or]: [{ company_id: ids }, { lead_id: leadIds }] } });
     await Note.destroy({ where: { [db.Sequelize.Op.or]: [{ company_id: ids }, { lead_id: leadIds }] } });
     await Activity.destroy({ where: { [db.Sequelize.Op.or]: [{ company_id: ids }, { lead_id: leadIds }] } });
@@ -218,6 +221,47 @@ async function seedLeads(companies, team, admin) {
   return leads;
 }
 
+async function seedSignals(companies, admin) {
+  const existing = await Signal.count();
+  if (existing > 0) {
+    console.log('[seed] signals: already present, skipping');
+    return;
+  }
+  const defs = [
+    { i: 2, service: 'WEBSITE_REDESIGN', source: 'linkedin', headline: 'Our site looks dated — need a redesign', detail: 'Posted on LinkedIn asking for agency recommendations for a B2B website redesign.' },
+    { i: 11, service: 'CRM', source: 'linkedin', headline: 'Looking for a CRM to manage our sales pipeline', detail: 'Comment on a LinkedIn post about sales tooling.' },
+    { i: 0, service: 'SOFTWARE_DEVELOPMENT', source: 'referral', headline: 'Need a custom internal tool built', detail: 'Referred by an existing client. Wants a quote for a workflow app.' },
+    { i: 5, service: 'WEBSITE_DEVELOPMENT', source: 'instagram', headline: 'DMed us — needs a website for the new restaurant', detail: 'Instagram DM enquiry after seeing a portfolio post.' },
+    { i: 20, service: 'WEBSITE_DEVELOPMENT', source: 'inbound_form', headline: 'Contact form: need an appointment-booking website', detail: 'Submitted the website contact form.' },
+    { i: 25, service: 'SOFTWARE_DEVELOPMENT', source: 'event', headline: 'Met at a startup meetup — wants an MVP built', detail: 'Exchanged cards at a local founder event.' },
+    { i: 13, service: 'DIGITAL_MARKETING', source: 'linkedin', headline: 'Asking for SEO + web help', detail: 'LinkedIn message.' },
+    { i: 30, service: 'ECOMMERCE', source: 'instagram', headline: 'Wants to move from Instagram selling to a real store', detail: 'Instagram DM.' },
+  ];
+
+  let created = 0;
+  for (const d of defs) {
+    const company = companies[d.i];
+    if (!company) continue;
+    // eslint-disable-next-line no-await-in-loop
+    await createSignal(
+      {
+        company_name: company.company_name,
+        cin: company.cin,
+        service: d.service,
+        source: d.source,
+        headline: d.headline,
+        detail: d.detail,
+        contact_name: 'Business owner',
+        confidence: 'HIGH',
+        captured_at: new Date(Date.now() - (created + 1) * 2 * 86400000),
+      },
+      { userId: admin.id }
+    );
+    created += 1;
+  }
+  console.log(`[seed] signals: ${created}`);
+}
+
 async function seedSettings() {
   await Setting.findOrCreate({
     where: { key: 'demo_mode' },
@@ -236,6 +280,7 @@ async function run() {
   const team = await ensureTeam();
   const companies = await seedCompanies();
   await seedLeads(companies, team, admin);
+  await seedSignals(companies, admin);
   await seedSettings();
 
   console.log('\n[seed] done.');

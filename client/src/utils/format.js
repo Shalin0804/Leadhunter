@@ -72,3 +72,36 @@ export const STATUS_LABELS = {
 };
 
 export const titleCase = (s = '') => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+export const SIGNAL_SERVICE_LABELS = {
+  WEBSITE_DEVELOPMENT: 'Website Development',
+  WEBSITE_REDESIGN: 'Website Redesign',
+  SOFTWARE_DEVELOPMENT: 'Software Development',
+  MOBILE_APP: 'Mobile App',
+  CRM: 'CRM',
+  ECOMMERCE: 'E-commerce',
+  DIGITAL_MARKETING: 'Digital Marketing',
+  OTHER: 'Other',
+};
+
+export const SIGNAL_SOURCE_LABELS = {
+  linkedin: 'LinkedIn',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  twitter: 'Twitter / X',
+  youtube: 'YouTube',
+  referral: 'Referral',
+  inbound_form: 'Inbound form',
+  event: 'Event',
+  marketplace: 'Marketplace',
+  cold_outreach: 'Cold outreach',
+  manual: 'Manual',
+  csv: 'CSV import',
+};
+
+export const SIGNAL_STATUS_LABELS = {
+  NEW: 'New',
+  REVIEWED: 'Reviewed',
+  CONVERTED: 'Converted',
+  DISMISSED: 'Dismissed',
+};

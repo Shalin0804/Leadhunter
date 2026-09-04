@@ -1,7 +1,7 @@
 const { CompanyImport, CompanyImportError, User } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
-const { analyze, runImport } = require('../services/importService');
+const { analyze, runImport, analyzeSignals, runSignalImport } = require('../services/importService');
 const { listProviders } = require('../providers');
 const { sendCsv } = require('../utils/csv');
 
@@ -22,6 +22,23 @@ exports.create = async (req, res) => {
     originalFilename: req.file.originalname,
     userId: req.user.id,
     updateExisting: req.body.update_existing !== 'false',
+  });
+  return ok(res, { import: importRow }, 201);
+};
+
+exports.previewSignals = async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('No CSV file uploaded (field name: file)');
+  const result = await analyzeSignals({ fileBuffer: req.file.buffer });
+  if (!result.ok) throw ApiError.badRequest(result.message, result);
+  return ok(res, result);
+};
+
+exports.createSignals = async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('No CSV file uploaded (field name: file)');
+  const importRow = await runSignalImport({
+    fileBuffer: req.file.buffer,
+    originalFilename: req.file.originalname,
+    userId: req.user.id,
   });
   return ok(res, { import: importRow }, 201);
 };

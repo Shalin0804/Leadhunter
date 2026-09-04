@@ -13,6 +13,7 @@ import Tasks from './pages/Tasks';
 import Notes from './pages/Notes';
 import Imports from './pages/Imports';
 import ImportDetail from './pages/ImportDetail';
+import Signals from './pages/Signals';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/discovery" element={<Discovery />} />
+        <Route path="/signals" element={<Signals />} />
         <Route path="/companies/:id" element={<CompanyProfile />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/leads/:id" element={<LeadProfile />} />

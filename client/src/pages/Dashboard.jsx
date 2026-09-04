@@ -10,6 +10,7 @@ import {
   FiCalendar,
   FiFileText,
   FiAward,
+  FiRadio,
 } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
 import { dashboardApi } from '../services/endpoints';
@@ -23,6 +24,7 @@ const CARD_META = [
   { key: 'qualifiedLeads', label: 'Qualified Leads', icon: <FiCheckCircle /> },
   { key: 'hotLeads', label: 'Hot Leads', icon: <FiThermometer /> },
   { key: 'contactedLeads', label: 'Contacted', icon: <FiPhoneCall /> },
+  { key: 'activeSignals', label: 'Active Buying Signals', icon: <FiRadio /> },
   { key: 'followUpsDue', label: 'Follow-ups Due', icon: <FiClock /> },
   { key: 'meetings', label: 'Meetings', icon: <FiCalendar /> },
   { key: 'proposals', label: 'Proposals', icon: <FiFileText /> },
@@ -159,7 +161,14 @@ export default function Dashboard() {
               <tbody>
                 {opps.items.map((o) => (
                   <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/companies/${o.id}`)}>
-                    <td className="cell-strong">{o.company_name}</td>
+                    <td className="cell-strong">
+                      {o.company_name}{' '}
+                      {o.has_signal && (
+                        <span className="badge blue" title={`Asked for ${o.signal_service} via ${o.signal_source}`}>
+                          Signal
+                        </span>
+                      )}
+                    </td>
                     <td className="nowrap">{fmtDate(o.date_of_incorporation)}</td>
                     <td>{o.industry || '—'}</td>
                     <td>{o.location || '—'}</td>

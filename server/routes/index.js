@@ -16,6 +16,7 @@ router.use('/pipeline', require('./pipeline.routes'));
 router.use('/tasks', require('./task.routes'));
 router.use('/notes', require('./note.routes'));
 router.use('/imports', require('./import.routes'));
+router.use('/signals', require('./signal.routes'));
 router.use('/dashboard', require('./dashboard.routes'));
 
 module.exports = router;

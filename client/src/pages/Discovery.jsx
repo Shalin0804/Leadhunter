@@ -14,7 +14,7 @@ import { companyApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
-import { fmtDate } from '../utils/format';
+import { fmtDate, SIGNAL_SERVICE_LABELS } from '../utils/format';
 
 const DATE_PRESETS = [
   { key: '', label: 'All time' },
@@ -62,6 +62,8 @@ export default function Discovery() {
       lead_temperature: get('lead_temperature'),
       min_score: get('min_score'),
       max_score: get('max_score'),
+      has_signal: get('has_signal'),
+      wants_service: get('wants_service'),
       date_preset: get('date_preset'),
       date_from: get('date_from'),
       date_to: get('date_to'),
@@ -74,7 +76,7 @@ export default function Discovery() {
 
   const { data, loading, error, reload } = useApi(() => companyApi.discovery(query), [JSON.stringify(query)]);
 
-  const activeFilterCount = ['state', 'city', 'industry', 'company_status', 'has_website', 'has_email', 'has_phone', 'lead_temperature', 'min_score', 'date_preset', 'date_from'].filter((k) => get(k)).length;
+  const activeFilterCount = ['state', 'city', 'industry', 'company_status', 'has_website', 'has_email', 'has_phone', 'lead_temperature', 'min_score', 'date_preset', 'date_from', 'has_signal', 'wants_service'].filter((k) => get(k)).length;
 
   const clearFilters = () => {
     const keep = new URLSearchParams();
@@ -193,6 +195,22 @@ export default function Discovery() {
             <div className="field">
               <label>Max score</label>
               <input className="input" type="number" min="0" max="100" value={get('max_score')} onChange={(e) => setParam('max_score', e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Buying signal</label>
+              <select className="select" value={get('has_signal')} onChange={(e) => setParam('has_signal', e.target.value)}>
+                <option value="">Any</option>
+                <option value="true">Has active signal</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Wants service</label>
+              <select className="select" value={get('wants_service')} onChange={(e) => setParam('wants_service', e.target.value)}>
+                <option value="">Any</option>
+                {Object.entries(SIGNAL_SERVICE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
             </div>
             {activeFilterCount > 0 && (
               <button className="btn btn-ghost" onClick={clearFilters}>

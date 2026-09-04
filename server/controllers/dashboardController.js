@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Company, Lead, Task, Activity, User } = require('../models');
+const { Company, Lead, Task, Activity, User, Signal } = require('../models');
 const { ok } = require('../utils/http');
 
 const LeadModel = Lead;
@@ -35,6 +35,8 @@ exports.stats = async (req, res) => {
     wonLeads,
     lostLeads,
     totalLeads,
+    activeSignals,
+    signalsThisWeek,
   ] = await Promise.all([
     Company.count(),
     Company.count({ where: { date_of_incorporation: { [Op.gte]: recentDate } } }),
@@ -47,6 +49,8 @@ exports.stats = async (req, res) => {
     Lead.count({ where: { status: 'WON' } }),
     Lead.count({ where: { status: 'LOST' } }),
     Lead.count(),
+    Signal.count({ where: { status: { [Op.in]: ['NEW', 'REVIEWED'] } } }),
+    Signal.count({ where: { captured_at: { [Op.gte]: daysAgoISO(7) } } }),
   ]);
 
   // charts — run in parallel
@@ -103,6 +107,8 @@ exports.stats = async (req, res) => {
       proposals,
       wonLeads,
       lostLeads,
+      activeSignals,
+      signalsThisWeek,
     },
     charts: {
       newByDay: numify(newByDay, 'count'),
@@ -123,23 +129,32 @@ exports.opportunities = async (req, res) => {
   const companies = await Company.findAll({
     order: [['lead_score', 'DESC'], ['date_of_incorporation', 'DESC']],
     limit,
-    include: [{ model: Lead, as: 'leads', attributes: ['id', 'status'] }],
+    include: [
+      { model: Lead, as: 'leads', attributes: ['id', 'status'] },
+      { model: Signal, as: 'signals', attributes: ['id', 'service', 'source', 'status'], separate: true },
+    ],
   });
 
-  const items = companies.map((c) => ({
-    id: c.id,
-    company_name: c.company_name,
-    date_of_incorporation: c.date_of_incorporation,
-    industry: c.industry,
-    location: [c.city, c.state].filter(Boolean).join(', '),
-    website: c.website,
-    website_status: c.has_website ? 'Has website' : 'No website',
-    lead_score: c.lead_score,
-    lead_temperature: c.lead_temperature,
-    recommended_service: c.recommended_service,
-    crm_status: c.leads?.[0]?.status || 'Not a lead',
-    lead_id: c.leads?.[0]?.id || null,
-  }));
+  const items = companies.map((c) => {
+    const activeSignal = (c.signals || []).find((s) => ['NEW', 'REVIEWED'].includes(s.status));
+    return {
+      id: c.id,
+      company_name: c.company_name,
+      date_of_incorporation: c.date_of_incorporation,
+      industry: c.industry,
+      location: [c.city, c.state].filter(Boolean).join(', '),
+      website: c.website,
+      website_status: c.has_website ? 'Has website' : 'No website',
+      lead_score: c.lead_score,
+      lead_temperature: c.lead_temperature,
+      recommended_service: c.recommended_service,
+      crm_status: c.leads?.[0]?.status || 'Not a lead',
+      lead_id: c.leads?.[0]?.id || null,
+      has_signal: !!activeSignal,
+      signal_service: activeSignal?.service || null,
+      signal_source: activeSignal?.source || null,
+    };
+  });
 
   return ok(res, { items });
 };

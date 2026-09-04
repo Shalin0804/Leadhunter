@@ -11,10 +11,23 @@ intelligence are the core of the product — not a generic CRM.
 - **Data providers:** pluggable — Phase 1 ships a CSV provider; MCA / external-API
   providers are stubbed and future-ready.
 
-> ⚠️ **Compliance:** This app does **not** scrape websites, bypass CAPTCHAs, rate
-> limits, robots rules or access controls. Company data comes from user-provided
-> CSV imports (Phase 1) and, later, licensed / official datasets and APIs. It does
-> not collect sensitive personal data and is designed for compliant B2B outreach.
+> ⚠️ **Compliance:** This app does **not** scrape websites or social platforms,
+> bypass CAPTCHAs, rate limits, robots rules or access controls. Company data comes
+> from user-provided CSV imports (Phase 1) and, later, licensed / official datasets
+> and APIs. **Buying signals** are captured only from channels you are permitted to
+> use — inbound forms, referrals, event contacts, replies to your own posts, and
+> official exports (LinkedIn Lead Gen Forms, Meta Lead Ads). It does not collect
+> sensitive personal data and is designed for compliant B2B outreach.
+
+## Buying Signals
+
+Track prospects who have **actively asked** for website / software / CRM work.
+Each signal records the service wanted, the source (LinkedIn, Instagram, referral,
+inbound form, event…), a link, and the request text. An active signal adds a large
+boost to the company's lead score and sets the recommended service to what they
+asked for. Signals can be logged one at a time or **imported from a CSV**
+(`Buying Signals` tab on the CSV Import page — accepts lead-form exports).
+Sample: `server/seed/sample-signals.csv`.
 
 ---
 
@@ -98,7 +111,7 @@ your data** (acceptance criterion #19).
 
 ```bash
 cd server
-npm run seed             # admin user + 34 demo companies + ~18 leads + tasks/notes
+npm run seed             # admin user + 34 demo companies + ~18 leads + 8 buying signals + tasks/notes
 npm run seed -- --wipe   # remove existing demo data first, then reseed
 ```
 
@@ -160,6 +173,7 @@ locations, temperature bands) — change them there, not in code.
 
 | Signal | Points |
 |---|---|
+| Active buying signal (asked for a service) | +35 |
 | Recently registered (≤ 180 days) | +20 |
 | Target industry | +15 |
 | Target location | +10 |
@@ -194,7 +208,11 @@ PATCH  /api/leads/:id/status      GET /api/leads/export
 GET    /api/pipeline
 GET/POST/PUT/DELETE /api/tasks
 GET/POST/DELETE /api/notes
+GET    /api/signals            GET/PATCH/DELETE /api/signals/:id
+POST   /api/signals            POST /api/signals/:id/convert
+GET    /api/signals/stats      GET /api/signals/export
 POST   /api/imports/companies/preview   POST /api/imports/companies
+POST   /api/imports/signals/preview     POST /api/imports/signals
 GET    /api/imports              GET /api/imports/:id   GET /api/imports/:id/errors.csv
 GET    /api/dashboard/stats      GET /api/dashboard/opportunities
 GET    /api/users
@@ -210,7 +228,8 @@ cd server && npm test
 
 Exercises login, dashboard stats, discovery + filters, company create/score,
 lead conversion, status changes + history, notes, overdue tasks, pipeline,
-CSV import (valid + invalid rows) and CSV export.
+buying signals (create, score boost, filter, convert, CSV import),
+CSV import (valid + invalid rows) and CSV export. 29 assertions.
 
 ## Deployment (Supabase + Render + Vercel)
 

@@ -113,6 +113,56 @@ async function run() {
   r = await call('GET', '/pipeline');
   assert(r.status === 200 && r.json.data.columns.length === 9, 'GET /pipeline has 9 stages');
 
+  // --- Buying signals ---
+  r = await call('POST', '/signals', {
+    company_name: 'Signal Test Co Pvt Ltd',
+    service: 'CRM',
+    source: 'linkedin',
+    headline: 'Need a CRM',
+    contact_email: 'owner@signaltestco.example',
+  });
+  assert(r.status === 201 && r.json.data.signal.company_id, 'POST /signals creates signal + company');
+  const signalId = r.json.data.signal.id;
+  const signalCompanyId = r.json.data.signal.company_id;
+
+  r = await call('GET', `/companies/${signalCompanyId}`);
+  assert(
+    r.status === 200 && r.json.data.analysis.hasActiveSignal === true && r.json.data.analysis.score >= 35,
+    'active signal boosts company score'
+  );
+
+  r = await call('GET', '/signals?service=CRM&status=NEW');
+  assert(r.status === 200 && r.json.data.items.some((s) => s.id === signalId), 'GET /signals with filters');
+
+  r = await call('GET', '/discovery/companies?has_signal=true&limit=50');
+  assert(r.status === 200 && r.json.data.items.some((c) => c.id === signalCompanyId), 'discovery has_signal filter');
+
+  r = await call('GET', '/signals/stats');
+  assert(r.status === 200 && typeof r.json.data.active === 'number', 'GET /signals/stats');
+
+  r = await call('POST', `/signals/${signalId}/convert`, { priority: 'HIGH' });
+  assert(r.status === 200 && r.json.data.lead.company_id === signalCompanyId, 'POST /signals/:id/convert');
+  const signalLeadId = r.json.data.lead.id;
+
+  // signal CSV import
+  const sigCsv = [
+    'company_name,contact_email,service,source,headline',
+    'CSV Signal Alpha Pvt Ltd,alpha-sig@example.com,Website Development,Instagram,Need a website',
+    ',,,,',
+  ].join('\n');
+  const sfd = new FormData();
+  sfd.append('file', new Blob([sigCsv], { type: 'text/csv' }), 'signals.csv');
+  const sigRes = await fetch(base + '/imports/signals', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: sfd,
+  });
+  const sigJson = await sigRes.json();
+  assert(sigRes.status === 201 && sigJson.data.import.imported_count >= 1, 'POST /imports/signals imports rows');
+
+  await call('DELETE', `/leads/${signalLeadId}`);
+  await call('DELETE', `/companies/${signalCompanyId}`);
+
   r = await call('GET', '/leads/export', null, { raw: true });
   assert(r.status === 200, 'GET /leads/export (CSV)');
 

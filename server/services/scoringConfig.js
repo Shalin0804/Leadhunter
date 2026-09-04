@@ -38,6 +38,7 @@ module.exports = {
 
   // Rule weights. `key` is referenced in the score breakdown.
   rules: {
+    activeBuyingSignal: { points: 35, label: 'Active buying signal (asked for a service)' },
     recentlyRegistered: { points: 20, label: 'Recently registered' },
     targetIndustry: { points: 15, label: 'In a target industry' },
     targetLocation: { points: 10, label: 'In a target location' },
@@ -46,6 +47,21 @@ module.exports = {
     publicBusinessEmail: { points: 5, label: 'Public business email available' },
     businessPhone: { points: 5, label: 'Business phone available' },
     socialPresence: { points: 5, label: 'Has social presence' },
+  },
+
+  // A signal is "active" (still worth acting on) while in one of these statuses.
+  activeSignalStatuses: ['NEW', 'REVIEWED'],
+
+  // Map a Signal.service enum onto the recommended-service label shown in the CRM.
+  signalServiceLabels: {
+    WEBSITE_DEVELOPMENT: 'Website Development',
+    WEBSITE_REDESIGN: 'Website Redesign',
+    SOFTWARE_DEVELOPMENT: 'Custom Software Development',
+    MOBILE_APP: 'Mobile App Development',
+    CRM: 'CRM Implementation',
+    ECOMMERCE: 'E-commerce Store Setup',
+    DIGITAL_MARKETING: 'Digital Growth / SEO & Marketing',
+    OTHER: null,
   },
 
   // score >= threshold  ->  temperature

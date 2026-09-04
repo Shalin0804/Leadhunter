@@ -10,6 +10,7 @@ import {
   FiUploadCloud,
   FiLogOut,
   FiMenu,
+  FiRadio,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -17,6 +18,7 @@ import { initials } from '../utils/format';
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: <FiGrid /> },
   { to: '/discovery', label: 'Company Discovery', icon: <FiSearch /> },
+  { to: '/signals', label: 'Buying Signals', icon: <FiRadio /> },
   { to: '/leads', label: 'Leads', icon: <FiTarget /> },
   { to: '/pipeline', label: 'Pipeline', icon: <FiColumns /> },
   { to: '/tasks', label: 'Tasks & Follow-ups', icon: <FiCheckSquare /> },
