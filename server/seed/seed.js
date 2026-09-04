@@ -1,7 +1,8 @@
 /**
  * Seed realistic demo data for development.
- *   npm run seed            -> upsert admin + demo dataset (idempotent-ish)
- *   npm run seed -- --wipe   -> delete existing demo data first
+ *   npm run seed              -> upsert admin + demo dataset (idempotent-ish)
+ *   npm run seed -- --wipe     -> delete existing demo data, then reseed
+ *   npm run seed -- --wipe-only -> delete demo data and stop (keep the admin user)
  *
  * All demo companies are flagged is_demo = true and shown with a "DEMO" badge in the UI.
  */
@@ -28,7 +29,8 @@ const {
   Signal,
 } = db;
 
-const WIPE = process.argv.includes('--wipe');
+const WIPE_ONLY = process.argv.includes('--wipe-only');
+const WIPE = WIPE_ONLY || process.argv.includes('--wipe');
 
 async function ensureAdmin() {
   const email = config.admin.email.toLowerCase();
@@ -82,6 +84,16 @@ async function wipeDemo() {
     await Lead.destroy({ where: { company_id: ids } });
     await Company.destroy({ where: { id: ids } });
   }
+
+  // Remove the demo team members (keep the admin).
+  const demoEmails = ['riya@leadhunter.local', 'arjun@leadhunter.local', 'neha@leadhunter.local'];
+  const demoUsers = await User.findAll({ where: { email: demoEmails } });
+  for (const u of demoUsers) {
+    await Lead.update({ assigned_user_id: null }, { where: { assigned_user_id: u.id } });
+    await Task.update({ assigned_user_id: null }, { where: { assigned_user_id: u.id } });
+    await u.destroy();
+  }
+  console.log(`[seed] removed ${ids.length} demo companies + ${demoUsers.length} demo users`);
 }
 
 async function seedCompanies() {
@@ -275,6 +287,14 @@ async function run() {
   await sequelize.sync();
 
   if (WIPE) await wipeDemo();
+
+  if (WIPE_ONLY) {
+    await ensureAdmin();
+    console.log('\n[seed] demo data removed. Admin user kept.');
+    console.log(`       Login: ${config.admin.email} / ${config.admin.password}`);
+    await sequelize.close();
+    process.exit(0);
+  }
 
   const admin = await ensureAdmin();
   const team = await ensureTeam();

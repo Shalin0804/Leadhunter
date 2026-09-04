@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "migrate": "node seed/migrate.js",
     "seed": "node seed/seed.js",
+    "unseed": "node seed/seed.js --wipe-only",
     "setup": "node seed/migrate.js && node seed/seed.js",
     "test": "node seed/smoke-test.js"
   },
