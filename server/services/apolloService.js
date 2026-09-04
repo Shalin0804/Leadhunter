@@ -96,7 +96,9 @@ async function upsertCompany(item, { userId } = {}) {
     );
 
     await rescoreCompany(company.id, { transaction });
-    return { company, created };
+    // rescoreCompany mutates a separate loaded instance — reload so callers see the real score.
+    const fresh = await Company.findByPk(company.id, { transaction });
+    return { company: fresh, created };
   });
 }
 
