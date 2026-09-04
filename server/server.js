@@ -14,9 +14,9 @@ async function start() {
     process.exit(1);
   }
 
-  app.listen(config.port, () => {
+  app.listen(config.port, '0.0.0.0', () => {
     // eslint-disable-next-line no-console
-    console.log(`[server] LeadHunter CRM API listening on http://localhost:${config.port} (${config.nodeEnv})`);
+    console.log(`[server] LeadHunter CRM API listening on port ${config.port} (${config.nodeEnv})`);
   });
 }
 

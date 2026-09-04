@@ -1,0 +1,36 @@
+# Render blueprint for the LeadHunter CRM API.
+# Create the service from this file: Render dashboard → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: leadhunter-api
+    runtime: node
+    plan: free
+    rootDir: server
+    # migrate runs on every deploy (safe + non-destructive). Add "&& npm run seed"
+    # once if you want the demo dataset in the hosted DB.
+    buildCommand: npm install && npm run migrate
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: ADMIN_EMAIL
+        value: admin@leadhunter.local
+      - key: ADMIN_NAME
+        value: LeadHunter Admin
+      # --- set these in the Render dashboard (marked sync:false = not stored in git) ---
+      - key: DATABASE_URL      # Supabase session-pooler / direct connection string
+        sync: false
+      - key: DB_SSL
+        value: "true"
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLIENT_ORIGIN     # your Vercel URL, e.g. https://leadhunter.vercel.app
+        sync: false
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: "true"

@@ -6,7 +6,7 @@ A B2B lead-generation CRM focused on discovering recently registered / new compa
 and converting them into qualified sales leads. Company discovery and new-company
 intelligence are the core of the product — not a generic CRM.
 
-- **Backend:** Node.js, Express, Sequelize, MySQL, JWT auth
+- **Backend:** Node.js, Express, Sequelize, MySQL **or** Postgres, JWT auth
 - **Frontend:** React + Vite, React Router, Axios, Recharts, Framer Motion
 - **Data providers:** pluggable — Phase 1 ships a CSV provider; MCA / external-API
   providers are stubbed and future-ready.
@@ -211,6 +211,12 @@ cd server && npm test
 Exercises login, dashboard stats, discovery + filters, company create/score,
 lead conversion, status changes + history, notes, overdue tasks, pipeline,
 CSV import (valid + invalid rows) and CSV export.
+
+## Deployment (Supabase + Render + Vercel)
+
+See **[DEPLOY.md](DEPLOY.md)**. The app auto-detects Postgres when `DATABASE_URL`
+starts with `postgres`, so no code changes are needed to move from local MySQL to
+hosted Postgres. `render.yaml` and `client/vercel.json` are included.
 
 ## 15. Production build
 

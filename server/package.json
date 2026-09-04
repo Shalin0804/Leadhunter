@@ -8,8 +8,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node seed/migrate.js",
-    "migrate:cli": "sequelize-cli db:migrate",
     "seed": "node seed/seed.js",
+    "setup": "node seed/migrate.js && node seed/seed.js",
     "test": "node seed/smoke-test.js"
   },
   "dependencies": {
@@ -24,10 +24,11 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.3.0",
     "mysql2": "^3.11.3",
+    "pg": "^8.13.1",
+    "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
-    "sequelize-cli": "^6.6.2"
+    "nodemon": "^3.1.4"
   }
 }

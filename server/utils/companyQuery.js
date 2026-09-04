@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { likeOp } = require('./dialect');
 
 const DATE_PRESETS = {
   today: () => startOfDay(new Date()),
@@ -29,18 +30,18 @@ function buildCompanyWhere(q = {}) {
     const term = `%${q.search.trim()}%`;
     and.push({
       [Op.or]: [
-        { company_name: { [Op.like]: term } },
-        { cin: { [Op.like]: term } },
-        { city: { [Op.like]: term } },
-        { state: { [Op.like]: term } },
-        { industry: { [Op.like]: term } },
+        { company_name: { [likeOp]: term } },
+        { cin: { [likeOp]: term } },
+        { city: { [likeOp]: term } },
+        { state: { [likeOp]: term } },
+        { industry: { [likeOp]: term } },
       ],
     });
   }
 
   if (q.state) where.state = q.state;
   if (q.city) where.city = q.city;
-  if (q.industry) where.industry = { [Op.like]: `%${q.industry}%` };
+  if (q.industry) where.industry = { [likeOp]: `%${q.industry}%` };
   if (q.company_status) where.company_status = q.company_status;
   if (q.company_type) where.company_type = q.company_type;
 

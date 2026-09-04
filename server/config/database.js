@@ -1,17 +1,33 @@
 const { Sequelize } = require('sequelize');
 const config = require('./config');
 
-const sequelize = new Sequelize(config.db.name, config.db.user, config.db.password, {
-  host: config.db.host,
-  port: config.db.port,
+const common = {
   dialect: config.db.dialect,
-  logging: config.nodeEnv === 'development' ? false : false,
+  logging: false,
   define: {
     underscored: true,
     freezeTableName: true,
     charset: 'utf8mb4',
   },
   pool: { max: 10, min: 0, acquire: 30000, idle: 10000 },
-});
+};
+
+// Hosted Postgres (Supabase, Render, etc.) requires SSL.
+const dialectOptions =
+  config.db.dialect === 'postgres' && config.db.ssl
+    ? { ssl: { require: true, rejectUnauthorized: false } }
+    : {};
+
+let sequelize;
+if (config.db.url) {
+  sequelize = new Sequelize(config.db.url, { ...common, dialectOptions });
+} else {
+  sequelize = new Sequelize(config.db.name, config.db.user, config.db.password, {
+    ...common,
+    host: config.db.host,
+    port: config.db.port,
+    dialectOptions,
+  });
+}
 
 module.exports = sequelize;

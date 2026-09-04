@@ -10,6 +10,7 @@ const {
   LeadScore,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
+const { likeOp } = require('../utils/dialect');
 const ApiError = require('../utils/ApiError');
 const { convertCompanyToLead, changeLeadStatus } = require('../services/leadService');
 const { sendCsv } = require('../utils/csv');
@@ -44,13 +45,13 @@ function buildLeadWhere(q) {
 
 function companyWhere(q) {
   const cw = {};
-  if (q.industry) cw.industry = { [Op.like]: `%${q.industry}%` };
+  if (q.industry) cw.industry = { [likeOp]: `%${q.industry}%` };
   if (q.state) cw.state = q.state;
   if (q.city) cw.city = q.city;
   if (q.search) {
     cw[Op.or] = [
-      { company_name: { [Op.like]: `%${q.search}%` } },
-      { cin: { [Op.like]: `%${q.search}%` } },
+      { company_name: { [likeOp]: `%${q.search}%` } },
+      { cin: { [likeOp]: `%${q.search}%` } },
     ];
   }
   return Object.keys(cw).length || Object.getOwnPropertySymbols(cw).length ? cw : undefined;

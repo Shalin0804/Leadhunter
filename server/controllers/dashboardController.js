@@ -1,7 +1,14 @@
 const { Op, fn, col, literal } = require('sequelize');
 const { Company, Lead, Task, Activity, User } = require('../models');
 const { ok } = require('../utils/http');
-const { Lead: LeadModel } = require('../models');
+
+const LeadModel = Lead;
+const COUNT_DESC = [fn('COUNT', col('id')), 'DESC'];
+
+// Portable "bucket the lead score" expression (raw column name is identical on both dialects).
+const SCORE_BUCKET =
+  "CASE WHEN lead_score >= 90 THEN '90-100' WHEN lead_score >= 75 THEN '75-89' " +
+  "WHEN lead_score >= 50 THEN '50-74' WHEN lead_score >= 30 THEN '30-49' ELSE '0-29' END";
 
 const daysAgoISO = (n) => new Date(Date.now() - n * 86400000);
 
@@ -37,16 +44,16 @@ exports.stats = async (req, res) => {
   // charts
   const newByDay = await Company.findAll({
     where: { date_of_incorporation: { [Op.gte]: daysAgoISO(60).toISOString().slice(0, 10) } },
-    attributes: [[fn('DATE', col('date_of_incorporation')), 'day'], [fn('COUNT', col('id')), 'count']],
-    group: [literal('day')],
-    order: [[literal('day'), 'ASC']],
+    attributes: [['date_of_incorporation', 'day'], [fn('COUNT', col('id')), 'count']],
+    group: ['date_of_incorporation'],
+    order: [['date_of_incorporation', 'ASC']],
     raw: true,
   });
 
   const byIndustry = await Company.findAll({
     attributes: ['industry', [fn('COUNT', col('id')), 'count']],
     group: ['industry'],
-    order: [[literal('count'), 'DESC']],
+    order: [COUNT_DESC],
     limit: 10,
     raw: true,
   });
@@ -54,19 +61,20 @@ exports.stats = async (req, res) => {
   const byState = await Company.findAll({
     attributes: ['state', [fn('COUNT', col('id')), 'count']],
     group: ['state'],
-    order: [[literal('count'), 'DESC']],
+    order: [COUNT_DESC],
     limit: 10,
     raw: true,
   });
 
-  const scoreBuckets = await Company.findAll({
-    attributes: [
-      [literal("CASE WHEN lead_score >= 90 THEN '90-100' WHEN lead_score >= 75 THEN '75-89' WHEN lead_score >= 50 THEN '50-74' WHEN lead_score >= 30 THEN '30-49' ELSE '0-29' END"), 'bucket'],
-      [fn('COUNT', col('id')), 'count'],
-    ],
-    group: [literal('bucket')],
+  const scoreBucketsRaw = await Company.findAll({
+    attributes: [[literal(SCORE_BUCKET), 'bucket'], [fn('COUNT', col('id')), 'count']],
+    group: [literal(SCORE_BUCKET)],
     raw: true,
   });
+  const scoreBuckets = ['0-29', '30-49', '50-74', '75-89', '90-100'].map((b) => ({
+    bucket: b,
+    count: Number(scoreBucketsRaw.find((r) => r.bucket === b)?.count || 0),
+  }));
 
   const pipeline = await Lead.findAll({
     attributes: ['status', [fn('COUNT', col('id')), 'count'], [fn('COALESCE', fn('SUM', col('estimated_value')), 0), 'value']],
