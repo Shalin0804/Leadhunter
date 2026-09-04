@@ -95,6 +95,48 @@ node seed/smoke-test.js https://leadhunter-api.onrender.com/api
 
 ---
 
+## 5. Automatic lead generation — scheduling on a free instance
+
+Render's free tier sleeps after ~15 minutes idle. The in-process scheduler
+(`node-cron`) only fires while the process is awake, so on a free instance a
+saved "daily at 9am" schedule won't reliably run by itself. Fix: point an
+external, free cron service at a secured endpoint that wakes the app and
+kicks off the run.
+
+1. In Render, set **`AUTOMATION_TRIGGER_SECRET`** to a long random string
+   (the blueprint auto-generates one — check Environment tab for the value).
+2. Pick one:
+   - **cron-job.org** (simplest) — create a free account, add a job:
+     - URL: `https://<your-render-app>.onrender.com/api/automation/run-scheduled`
+     - Method: `POST`
+     - Header: `X-Automation-Secret: <the secret from step 1>`
+     - Schedule: however often you want it checked (e.g. every hour — the
+       endpoint itself no-ops if a run is already in progress, so calling it
+       more often than your configured frequency is harmless)
+   - **GitHub Actions** (if you already have a repo) — a scheduled workflow:
+     ```yaml
+     name: trigger-leadhunter-automation
+     on:
+       schedule:
+         - cron: '0 3 * * *' # 9:00 AM IST
+       workflow_dispatch: {}
+     jobs:
+       trigger:
+         runs-on: ubuntu-latest
+         steps:
+           - run: |
+               curl -f -X POST "https://<your-render-app>.onrender.com/api/automation/run-scheduled" \
+                 -H "X-Automation-Secret: ${{ secrets.AUTOMATION_TRIGGER_SECRET }}"
+     ```
+     (add `AUTOMATION_TRIGGER_SECRET` as a repo secret with the same value as Render's)
+3. In the app, go to **Automatic Lead Gen → Automation Settings**, turn on
+   **Enable Automatic Lead Generation**, set your locations/industries, and
+   save. The external cron ping now drives the run regardless of whether
+   Render's instance happened to be asleep.
+
+If you upgrade to an always-on paid Render instance, the in-process scheduler
+alone becomes reliable and the external ping is just a harmless backup.
+
 ## Environment variable reference
 
 | Var | Where | Notes |
@@ -105,6 +147,9 @@ node seed/smoke-test.js https://leadhunter-api.onrender.com/api
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Render | seeded/reset by `npm run seed` |
 | `CLIENT_ORIGIN` | Render | comma-separated allowed browser origins |
 | `ALLOW_VERCEL_PREVIEWS` | Render | `true` to allow `*.vercel.app` preview URLs |
+| `APOLLO_API_KEY` | Render | optional — live Apollo search/enrichment (needs a paid Apollo plan for search) |
+| `GOOGLE_PLACES_API_KEY` | Render | optional — drop-in upgrade for automatic business discovery (default is free OpenStreetMap) |
+| `AUTOMATION_TRIGGER_SECRET` | Render | required for the external cron trigger above |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data

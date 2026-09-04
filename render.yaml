@@ -37,3 +37,9 @@ services:
       # Optional — enables live Apollo search + enrichment. Leave unset to disable.
       - key: APOLLO_API_KEY
         sync: false
+      # Optional — drop-in upgrade for business discovery. Leave unset to use free OSM discovery.
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      # Required for the external cron trigger (see DEPLOY.md) to fire scheduled discovery runs.
+      - key: AUTOMATION_TRIGGER_SECRET
+        generateValue: true

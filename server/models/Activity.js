@@ -19,7 +19,12 @@ module.exports = (sequelize) => {
           'meeting',
           'assignment',
           'import',
-          'system'
+          'system',
+          'discovered',
+          'website_analyzed',
+          'contacted',
+          'reply_received',
+          'outreach_generated'
         ),
         allowNull: false,
       },

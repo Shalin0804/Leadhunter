@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Company, Lead, Task, Activity, User, Signal } = require('../models');
+const { Company, Lead, Task, Activity, User, Signal, SearchRun } = require('../models');
 const { ok } = require('../utils/http');
 
 const LeadModel = Lead;
@@ -37,6 +37,9 @@ exports.stats = async (req, res) => {
     totalLeads,
     activeSignals,
     signalsThisWeek,
+    notContactedLeads,
+    repliedLeads,
+    highPriorityLeads,
   ] = await Promise.all([
     Company.count(),
     Company.count({ where: { date_of_incorporation: { [Op.gte]: recentDate } } }),
@@ -51,6 +54,9 @@ exports.stats = async (req, res) => {
     Lead.count(),
     Signal.count({ where: { status: { [Op.in]: ['NEW', 'REVIEWED'] } } }),
     Signal.count({ where: { captured_at: { [Op.gte]: daysAgoISO(7) } } }),
+    Lead.count({ where: { contact_status: 'NOT_CONTACTED' } }),
+    Lead.count({ where: { contact_status: 'REPLIED' } }),
+    Lead.count({ where: { priority: 'HIGH' } }),
   ]);
 
   // charts — run in parallel
@@ -109,6 +115,9 @@ exports.stats = async (req, res) => {
       lostLeads,
       activeSignals,
       signalsThisWeek,
+      notContactedLeads,
+      repliedLeads,
+      highPriorityLeads,
     },
     charts: {
       newByDay: numify(newByDay, 'count'),
@@ -157,6 +166,76 @@ exports.opportunities = async (req, res) => {
   });
 
   return ok(res, { items });
+};
+
+const leadWithCompany = {
+  include: [{ model: Company, as: 'company', attributes: ['id', 'company_name', 'industry', 'city', 'state'] }, { model: User, as: 'assignedUser', attributes: ['id', 'name'] }],
+};
+
+exports.todaysWork = async (req, res) => {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const [hotNotContacted, followUpsToday, overdueFollowUps, repliedLeads, proposalsPending, interestedLeads] = await Promise.all([
+    Lead.findAll({ where: { lead_temperature: 'HOT', contact_status: 'NOT_CONTACTED' }, order: [['lead_score', 'DESC']], limit: 20, ...leadWithCompany }),
+    Task.findAll({
+      where: { is_follow_up: true, status: { [Op.notIn]: ['COMPLETED', 'CANCELLED'] }, due_date: { [Op.between]: [startOfDay, endOfDay] } },
+      include: [{ model: Lead, as: 'lead', include: [{ model: Company, as: 'company', attributes: ['id', 'company_name'] }] }],
+      order: [['due_date', 'ASC']],
+    }),
+    Task.findAll({
+      where: { is_follow_up: true, status: { [Op.notIn]: ['COMPLETED', 'CANCELLED'] }, due_date: { [Op.lt]: startOfDay } },
+      include: [{ model: Lead, as: 'lead', include: [{ model: Company, as: 'company', attributes: ['id', 'company_name'] }] }],
+      order: [['due_date', 'ASC']],
+    }),
+    Lead.findAll({ where: { contact_status: 'REPLIED' }, order: [['last_contacted_at', 'DESC']], limit: 20, ...leadWithCompany }),
+    Lead.findAll({ where: { contact_status: 'PROPOSAL_SENT' }, order: [['last_contacted_at', 'DESC']], limit: 20, ...leadWithCompany }),
+    Lead.findAll({ where: { contact_status: 'INTERESTED' }, order: [['last_contacted_at', 'DESC']], limit: 20, ...leadWithCompany }),
+  ]);
+
+  return ok(res, { hotNotContacted, followUpsToday, overdueFollowUps, repliedLeads, proposalsPending, interestedLeads });
+};
+
+exports.dailySummary = async (req, res) => {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const [
+    runsToday,
+    hotLeadsToday,
+    highPriorityToday,
+    noWebsiteToday,
+    followUpsToday,
+    topLeads,
+  ] = await Promise.all([
+    SearchRun.findAll({ where: { started_at: { [Op.gte]: startOfDay } } }),
+    Lead.count({ where: { lead_temperature: 'HOT', created_at: { [Op.gte]: startOfDay } } }),
+    Lead.count({ where: { priority: 'HIGH', created_at: { [Op.gte]: startOfDay } } }),
+    Company.count({ where: { has_website: false, first_discovered_at: { [Op.gte]: startOfDay } } }),
+    Task.count({ where: { is_follow_up: true, due_date: { [Op.gte]: startOfDay, [Op.lt]: new Date(startOfDay.getTime() + 86400000) }, status: { [Op.notIn]: ['COMPLETED', 'CANCELLED'] } } }),
+    Lead.findAll({ where: { contact_status: 'NOT_CONTACTED' }, order: [['lead_score', 'DESC']], limit: 5, ...leadWithCompany }),
+  ]);
+
+  const newLeadsFound = runsToday.reduce((s, r) => s + r.qualified_leads, 0);
+  const duplicatesSkipped = runsToday.reduce((s, r) => s + r.duplicates_skipped, 0);
+  const alreadyContactedSkipped = runsToday.reduce((s, r) => s + r.already_contacted_skipped, 0);
+  const businessesDiscovered = runsToday.reduce((s, r) => s + r.businesses_discovered, 0);
+
+  return ok(res, {
+    date: startOfDay.toISOString().slice(0, 10),
+    searchRuns: runsToday.length,
+    businessesDiscovered,
+    newLeadsFound,
+    hotLeads: hotLeadsToday,
+    highPriority: highPriorityToday,
+    noWebsite: noWebsiteToday,
+    duplicatesSkipped,
+    alreadyContactedSkipped,
+    followUpsDueToday: followUpsToday,
+    topLeads,
+  });
 };
 
 exports.activityFeed = async (req, res) => {

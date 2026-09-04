@@ -1,12 +1,23 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink } from 'react-icons/fi';
+import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
 import { leadApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
-import { fmtDate, fmtDateTime, fmtMoney, fmtRelative, titleCase, STATUS_LABELS } from '../utils/format';
+import { ContactLeadModal, ContactStatusModal, RecontactModal, OutreachModal } from '../components/contactModals';
+import {
+  fmtDate,
+  fmtDateTime,
+  fmtMoney,
+  fmtRelative,
+  titleCase,
+  STATUS_LABELS,
+  CONTACT_STATUS_LABELS,
+  LEAD_QUALIFICATION_LABELS,
+  CONTACT_METHOD_LABELS,
+} from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
 const Row = ({ label, children }) => (
@@ -52,6 +63,16 @@ export default function LeadProfile() {
     }
   };
 
+  const setLeadQualification = async (lead_status) => {
+    try {
+      await leadApi.updateLeadStatus(id, { lead_status });
+      toast.success(`Lead status: ${LEAD_QUALIFICATION_LABELS[lead_status]}`);
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-header">
@@ -67,6 +88,23 @@ export default function LeadProfile() {
           </p>
         </div>
         <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+          {lead.contact_status === 'NOT_CONTACTED' ? (
+            <button className="btn btn-primary" onClick={() => setModal({ type: 'contact' })}>
+              <FiPhoneCall /> Contact
+            </button>
+          ) : (
+            <>
+              <button className="btn" onClick={() => setModal({ type: 'contactStatus' })}>
+                <FiSend /> Update contact status
+              </button>
+              <button className="btn" onClick={() => setModal({ type: 'recontact' })}>
+                <FiRotateCcw /> Re-contact
+              </button>
+            </>
+          )}
+          <button className="btn" onClick={() => setModal({ type: 'outreach' })}>
+            <FiZap /> Generate outreach
+          </button>
           <button className="btn" onClick={() => setModal({ type: 'assign' })}>
             <FiUser /> Assign
           </button>
@@ -101,8 +139,17 @@ export default function LeadProfile() {
               <Row label="Temperature">
                 <TemperatureBadge value={lead.lead_temperature} />
               </Row>
-              <Row label="Status">
+              <Row label="Pipeline stage">
                 <StatusBadge value={lead.status} />
+              </Row>
+              <Row label="Contact status">
+                <span className="badge blue">{CONTACT_STATUS_LABELS[lead.contact_status]}</span>
+                {lead.contact_method && <span className="cell-sub" style={{ marginLeft: 8 }}>via {CONTACT_METHOD_LABELS[lead.contact_method]}</span>}
+              </Row>
+              <Row label="Lead status">
+                <select className="select" style={{ maxWidth: 180 }} value={lead.lead_status} onChange={(e) => setLeadQualification(e.target.value)}>
+                  {Object.entries(LEAD_QUALIFICATION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
               </Row>
               <Row label="Recommended service">{lead.recommended_service}</Row>
               <Row label="Priority">
@@ -131,11 +178,38 @@ export default function LeadProfile() {
                 />
               </Row>
               <Row label="Assigned user">{lead.assignedUser?.name || 'Unassigned'}</Row>
+              <Row label="Contacted at">{fmtDateTime(lead.contacted_at)}</Row>
               <Row label="Last contacted">{fmtDateTime(lead.last_contacted_at)}</Row>
               <Row label="Created">{fmtDate(lead.created_at)}</Row>
+              <Row label="Source">{lead.source === 'automation' ? <span className="badge blue">Automation</span> : 'Manual'}</Row>
               {lead.lost_reason && <Row label="Lost reason">{lead.lost_reason}</Row>}
             </dl>
           </Card>
+
+          {(lead.ai_problem || lead.ai_sales_angle) && (
+            <Card title="AI Qualification">
+              {lead.ai_problem && (
+                <>
+                  <div className="section-title">Problem</div>
+                  <p className="text-sm mt-2">{lead.ai_problem}</p>
+                </>
+              )}
+              {lead.ai_evidence?.length > 0 && (
+                <>
+                  <div className="section-title mt-4">Evidence</div>
+                  <ul className="reason-list">
+                    {lead.ai_evidence.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </>
+              )}
+              {lead.ai_sales_angle && (
+                <>
+                  <div className="section-title mt-4">Sales angle</div>
+                  <p className="text-sm mt-2">{lead.ai_sales_angle}</p>
+                </>
+              )}
+            </Card>
+          )}
 
           <Card title="Activity timeline">
             {activities.length ? (
@@ -165,6 +239,7 @@ export default function LeadProfile() {
                     <div className="cell-strong">{t.title}</div>
                     <div className="cell-sub">
                       {t.due_date ? `Due ${fmtDateTime(t.due_date)}` : 'No due date'} · {t.priority}
+                      {t.follow_up_method && ` · ${CONTACT_METHOD_LABELS[t.follow_up_method]}`}
                     </div>
                   </div>
                   <span className={`badge ${t.status === 'COMPLETED' ? 'green' : t.status === 'CANCELLED' ? 'gray' : 'blue'}`}>
@@ -222,6 +297,10 @@ export default function LeadProfile() {
       <AddNoteModal open={modal?.type === 'note'} onClose={() => setModal(null)} leadId={lead.id} companyId={lead.company_id} onDone={reload} />
       <AddFollowUpModal open={modal?.type === 'follow'} onClose={() => setModal(null)} leadId={lead.id} companyId={lead.company_id} onDone={reload} />
       <AssignModal open={modal?.type === 'assign'} onClose={() => setModal(null)} lead={lead} onDone={reload} />
+      <ContactLeadModal open={modal?.type === 'contact'} onClose={() => setModal(null)} leadId={lead.id} onDone={reload} />
+      <ContactStatusModal open={modal?.type === 'contactStatus'} onClose={() => setModal(null)} leadId={lead.id} currentStatus={lead.contact_status} onDone={reload} />
+      <RecontactModal open={modal?.type === 'recontact'} onClose={() => setModal(null)} leadId={lead.id} onDone={reload} />
+      <OutreachModal open={modal?.type === 'outreach'} onClose={() => setModal(null)} companyId={lead.company_id} leadId={lead.id} />
     </div>
   );
 }

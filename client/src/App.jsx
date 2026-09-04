@@ -14,6 +14,8 @@ import Notes from './pages/Notes';
 import Imports from './pages/Imports';
 import ImportDetail from './pages/ImportDetail';
 import Signals from './pages/Signals';
+import Automation from './pages/Automation';
+import AutomationRunDetail from './pages/AutomationRunDetail';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -40,6 +42,8 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/discovery" element={<Discovery />} />
         <Route path="/signals" element={<Signals />} />
+        <Route path="/automation" element={<Automation />} />
+        <Route path="/automation/runs/:id" element={<AutomationRunDetail />} />
         <Route path="/companies/:id" element={<CompanyProfile />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/leads/:id" element={<LeadProfile />} />

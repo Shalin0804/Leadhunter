@@ -13,7 +13,7 @@ const {
 const { ok, parsePagination, paginated } = require('../utils/http');
 const { likeOp } = require('../utils/dialect');
 const ApiError = require('../utils/ApiError');
-const { convertCompanyToLead, changeLeadStatus } = require('../services/leadService');
+const { convertCompanyToLead, changeLeadStatus, markContacted, setContactStatus, setLeadStatus, recontact } = require('../services/leadService');
 const { sendCsv } = require('../utils/csv');
 
 const companyAttrs = ['id', 'company_name', 'cin', 'industry', 'state', 'city', 'website', 'date_of_incorporation'];
@@ -24,6 +24,11 @@ function buildLeadWhere(q) {
   if (q.lead_temperature) where.lead_temperature = q.lead_temperature;
   if (q.assigned_user_id) where.assigned_user_id = q.assigned_user_id;
   if (q.priority) where.priority = q.priority;
+  if (q.contact_status) where.contact_status = q.contact_status.includes(',') ? { [Op.in]: q.contact_status.split(',') } : q.contact_status;
+  if (q.lead_status) where.lead_status = q.lead_status;
+  if (q.source) where.source = q.source;
+  // "New leads" view: hide anything already engaged, unless explicitly asked to include it.
+  if (q.new_only === 'true' && q.include_contacted !== 'true') where.contact_status = 'NOT_CONTACTED';
 
   const score = {};
   if (q.min_score) score[Op.gte] = Number(q.min_score);
@@ -209,6 +214,60 @@ exports.updateStatus = async (req, res) => {
       { model: Company, as: 'company', attributes: companyAttrs },
       { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
     ],
+  });
+  return ok(res, { lead: full });
+};
+
+// [ CONTACT ] button — always sets contact_status=CONTACTED, contacted_at=now.
+exports.contact = async (req, res) => {
+  const lead = await markContacted(req.params.id, {
+    userId: req.user.id,
+    method: req.body.method,
+    note: req.body.note,
+  });
+  const full = await Lead.findByPk(lead.id, {
+    include: [
+      { model: Company, as: 'company', attributes: companyAttrs },
+      { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
+    ],
+  });
+  return ok(res, { lead: full });
+};
+
+// General contact-status transition (REPLIED, INTERESTED, MEETING_BOOKED, WON, LOST, DO_NOT_CONTACT, ...).
+exports.updateContactStatus = async (req, res) => {
+  const lead = await setContactStatus(req.params.id, req.body.contact_status, {
+    userId: req.user.id,
+    note: req.body.note,
+    method: req.body.method,
+  });
+  const full = await Lead.findByPk(lead.id, {
+    include: [
+      { model: Company, as: 'company', attributes: companyAttrs },
+      { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
+    ],
+  });
+  return ok(res, { lead: full });
+};
+
+// Qualification state — independent of contact history.
+exports.updateLeadStatus = async (req, res) => {
+  const lead = await setLeadStatus(req.params.id, req.body.lead_status, { userId: req.user.id, note: req.body.note });
+  const full = await Lead.findByPk(lead.id, {
+    include: [{ model: Company, as: 'company', attributes: companyAttrs }],
+  });
+  return ok(res, { lead: full });
+};
+
+// [ RE-CONTACT ] — manual only, moves an already-engaged lead back to FOLLOW_UP (or a chosen state).
+exports.recontact = async (req, res) => {
+  const lead = await recontact(req.params.id, {
+    userId: req.user.id,
+    toContactStatus: req.body.contact_status,
+    note: req.body.note,
+  });
+  const full = await Lead.findByPk(lead.id, {
+    include: [{ model: Company, as: 'company', attributes: companyAttrs }],
   });
   return ok(res, { lead: full });
 };

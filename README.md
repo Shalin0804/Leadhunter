@@ -19,6 +19,39 @@ intelligence are the core of the product — not a generic CRM.
 > official exports (LinkedIn Lead Gen Forms, Meta Lead Ads). It does not collect
 > sensitive personal data and is designed for compliant B2B outreach.
 
+## Automatic Lead Generation
+
+Configure locations, industries, opportunities, a schedule and a daily lead
+limit once (**Automatic Lead Gen** in the sidebar) and the backend keeps
+discovering, scoring and qualifying new prospects on its own:
+
+```
+TARGET → SOURCE DISCOVERY (OpenStreetMap, free) → DEDUPLICATION
+  → WEBSITE CHECK / ANALYSIS → OPPORTUNITY DETECTION → AI QUALIFICATION (rule-based)
+  → SCORE → CONTACT-HISTORY CHECK → SAVE
+```
+
+- **Contact tracking is permanent and separate from lead qualification.**
+  `lead_status` (NEW/QUALIFIED/UNQUALIFIED/ARCHIVED) and `contact_status`
+  (NOT_CONTACTED → CONTACTED → … → WON/LOST/DO_NOT_CONTACT) are independent
+  fields. Once a lead leaves `NOT_CONTACTED`, automation never re-surfaces it
+  as new and never re-spends enrichment on it.
+- **One company, one lead, many sources.** Rediscovering the same business —
+  even from a different provider — updates `times_discovered` and adds a
+  `lead_sources` row; it never creates a duplicate company or lead.
+- **Nothing is contacted automatically.** `[Contact]`, `[Re-contact]`, and
+  `[Generate outreach]` are all manual actions.
+- **Cost control:** business discovery (OpenStreetMap) is free; a duplicate
+  business without a lead yet only gets re-audited/re-scored once its last
+  website check is more than 3 days old; the daily lead limit is enforced via
+  `api_usage` before any new lead is saved.
+- Search History (every run's location/industry/provider/counts) and API
+  usage are both visible on the Automatic Lead Gen page.
+
+See **[DEPLOY.md](DEPLOY.md)** for wiring up reliable scheduling (a free
+Render instance sleeps when idle, so a scheduled run needs an external cron
+ping — instructions included) and for the optional Google Places upgrade.
+
 ## Apollo.io (live company search + enrichment)
 
 Optional. Set `APOLLO_API_KEY` (Apollo → Settings → Integrations → API) in
@@ -225,6 +258,12 @@ PATCH  /api/leads/:id/status      GET /api/leads/export
 GET    /api/pipeline
 GET/POST/PUT/DELETE /api/tasks
 GET/POST/DELETE /api/notes
+PATCH  /api/leads/:id/contact          PATCH /api/leads/:id/contact-status
+PATCH  /api/leads/:id/lead-status      POST  /api/leads/:id/recontact
+GET/PUT /api/automation/settings       POST  /api/automation/run-now
+GET    /api/automation/runs            GET   /api/automation/runs/:id
+GET    /api/automation/api-usage       POST  /api/automation/run-scheduled (external cron, secret-protected)
+GET    /api/outreach                   POST  /api/outreach/generate
 GET    /api/signals            GET/PATCH/DELETE /api/signals/:id
 POST   /api/signals            POST /api/signals/:id/convert
 GET    /api/signals/stats      GET /api/signals/export
@@ -244,9 +283,12 @@ cd server && npm test
 ```
 
 Exercises login, dashboard stats, discovery + filters, company create/score,
-lead conversion, status changes + history, notes, overdue tasks, pipeline,
-buying signals (create, score boost, filter, convert, CSV import),
-CSV import (valid + invalid rows) and CSV export. 29 assertions.
+lead conversion, status/contact-status/lead-status changes + history,
+contact tracking (contact, new_only exclusion, recontact), outreach
+generation, notes, overdue tasks, 12-stage pipeline, automation settings +
+search history + API usage + the secured external-cron endpoint, buying
+signals (create, score boost, filter, convert, CSV import), CSV import
+(valid + invalid rows) and CSV export. 41 assertions.
 
 ## Deployment (Supabase + Render + Vercel)
 

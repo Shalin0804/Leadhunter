@@ -105,3 +105,47 @@ export const SIGNAL_STATUS_LABELS = {
   CONVERTED: 'Converted',
   DISMISSED: 'Dismissed',
 };
+
+export const CONTACT_STATUS_LABELS = {
+  NOT_CONTACTED: 'Not Contacted',
+  CONTACTED: 'Contacted',
+  FOLLOW_UP: 'Follow-up',
+  REPLIED: 'Replied',
+  INTERESTED: 'Interested',
+  MEETING_BOOKED: 'Meeting Booked',
+  PROPOSAL_SENT: 'Proposal Sent',
+  NEGOTIATION: 'Negotiation',
+  WON: 'Won',
+  LOST: 'Lost',
+  NOT_INTERESTED: 'Not Interested',
+  DO_NOT_CONTACT: 'Do Not Contact',
+};
+
+export const LEAD_QUALIFICATION_LABELS = {
+  NEW: 'New',
+  QUALIFIED: 'Qualified',
+  UNQUALIFIED: 'Unqualified',
+  ARCHIVED: 'Archived',
+};
+
+export const CONTACT_METHOD_LABELS = {
+  EMAIL: 'Email',
+  WHATSAPP: 'WhatsApp',
+  PHONE: 'Phone',
+  LINKEDIN: 'LinkedIn',
+  INSTAGRAM: 'Instagram',
+  OTHER: 'Other',
+};
+
+export const OPPORTUNITY_LABELS = {
+  WEBSITE: 'Website',
+  WEBSITE_REDESIGN: 'Website Redesign',
+  CRM: 'CRM',
+  BOOKING_SYSTEM: 'Booking System',
+  APPOINTMENT_SYSTEM: 'Appointment System',
+  ECOMMERCE: 'E-commerce',
+  CUSTOM_SOFTWARE: 'Custom Software',
+  MOBILE_APP: 'Mobile App',
+  BUSINESS_AUTOMATION: 'Business Automation',
+  ADMIN_DASHBOARD: 'Admin Dashboard',
+};

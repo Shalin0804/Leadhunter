@@ -42,6 +42,10 @@ export const leadApi = {
   createFromCompany: (body) => unwrap(api.post('/leads', body)),
   update: (id, body) => unwrap(api.put(`/leads/${id}`, body)),
   updateStatus: (id, status, note) => unwrap(api.patch(`/leads/${id}/status`, { status, note })),
+  contact: (id, body) => unwrap(api.patch(`/leads/${id}/contact`, body)),
+  updateContactStatus: (id, body) => unwrap(api.patch(`/leads/${id}/contact-status`, body)),
+  updateLeadStatus: (id, body) => unwrap(api.patch(`/leads/${id}/lead-status`, body)),
+  recontact: (id, body) => unwrap(api.post(`/leads/${id}/recontact`, body)),
   remove: (id) => unwrap(api.delete(`/leads/${id}`)),
   exportCsv: (params) => downloadFile(`/leads/export${qs(params)}`, 'leads.csv'),
 };
@@ -83,6 +87,22 @@ export const importApi = {
 
 export const userApi = {
   list: () => unwrap(api.get('/users')),
+};
+
+export const automationApi = {
+  getSettings: () => unwrap(api.get('/automation/settings')),
+  updateSettings: (body) => unwrap(api.put('/automation/settings', body)),
+  runNow: (body) => unwrap(api.post('/automation/run-now', body || {})),
+  listRuns: (params) => unwrap(api.get(`/automation/runs${qs(params)}`)),
+  getRun: (id) => unwrap(api.get(`/automation/runs/${id}`)),
+  apiUsage: () => unwrap(api.get('/automation/api-usage')),
+  status: () => unwrap(api.get('/automation/status')),
+};
+
+export const outreachApi = {
+  list: (params) => unwrap(api.get(`/outreach${qs(params)}`)),
+  generate: (body) => unwrap(api.post('/outreach/generate', body)),
+  remove: (id) => unwrap(api.delete(`/outreach/${id}`)),
 };
 
 export const apolloApi = {

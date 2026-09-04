@@ -11,6 +11,7 @@ import {
   FiLogOut,
   FiMenu,
   FiRadio,
+  FiZap,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -18,6 +19,7 @@ import { initials } from '../utils/format';
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: <FiGrid /> },
   { to: '/discovery', label: 'Company Discovery', icon: <FiSearch /> },
+  { to: '/automation', label: 'Automatic Lead Gen', icon: <FiZap /> },
   { to: '/signals', label: 'Buying Signals', icon: <FiRadio /> },
   { to: '/leads', label: 'Leads', icon: <FiTarget /> },
   { to: '/pipeline', label: 'Pipeline', icon: <FiColumns /> },

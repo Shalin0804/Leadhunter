@@ -20,6 +20,7 @@ module.exports = (sequelize) => {
         defaultValue: 'TODO',
       },
       is_follow_up: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      follow_up_method: { type: DataTypes.ENUM('EMAIL', 'WHATSAPP', 'PHONE', 'LINKEDIN', 'INSTAGRAM', 'OTHER'), allowNull: true },
       completed_at: { type: DataTypes.DATE, allowNull: true },
     },
     {

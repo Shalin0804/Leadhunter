@@ -44,4 +44,13 @@ module.exports = {
     apiKey: env('APOLLO_API_KEY', ''),
     baseUrl: env('APOLLO_BASE_URL', 'https://api.apollo.io/api/v1'),
   },
+
+  googlePlaces: {
+    apiKey: env('GOOGLE_PLACES_API_KEY', ''),
+  },
+
+  automation: {
+    // Shared secret an external cron service must send to trigger a scheduled run.
+    triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),
+  },
 };

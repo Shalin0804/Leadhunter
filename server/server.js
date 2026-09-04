@@ -1,6 +1,7 @@
 const app = require('./app');
 const config = require('./config/config');
 const { sequelize } = require('./models');
+const { reschedule } = require('./jobs/automationScheduler');
 
 async function start() {
   try {
@@ -21,6 +22,13 @@ async function start() {
     // eslint-disable-next-line no-console
     console.log(`[server] LeadHunter CRM API listening on port ${config.port} (${config.nodeEnv})`);
   });
+
+  try {
+    await reschedule();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[automation] scheduler init failed:', err.message);
+  }
 }
 
 start();

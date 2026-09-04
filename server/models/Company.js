@@ -29,6 +29,16 @@ module.exports = (sequelize) => {
       source: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'csv' },
       is_demo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
 
+      // Dedup keys, kept in sync on save — see services/dedupeService.js.
+      normalized_domain: { type: DataTypes.STRING(255), allowNull: true },
+      normalized_phone: { type: DataTypes.STRING(30), allowNull: true },
+      normalized_name: { type: DataTypes.STRING(255), allowNull: true },
+
+      // Automated-discovery tracking — lets repeated searches recognize "seen this before".
+      times_discovered: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      first_discovered_at: { type: DataTypes.DATE, allowNull: true },
+      last_discovered_at: { type: DataTypes.DATE, allowNull: true },
+
       // Enrichment (Apollo / future providers)
       apollo_organization_id: { type: DataTypes.STRING(40), allowNull: true },
       linkedin_url: { type: DataTypes.STRING(255), allowNull: true },
@@ -60,6 +70,8 @@ module.exports = (sequelize) => {
         { fields: ['lead_score'] },
         { fields: ['lead_temperature'] },
         { fields: ['apollo_organization_id'] },
+        { fields: ['normalized_domain'] },
+        { fields: ['normalized_phone'] },
       ],
     }
   );

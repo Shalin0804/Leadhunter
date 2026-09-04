@@ -4,6 +4,8 @@ const CsvSignalProvider = require('./CsvSignalProvider');
 const MCAProvider = require('./MCAProvider');
 const ApiCompanyProvider = require('./ApiCompanyProvider');
 const ApolloCompanyProvider = require('./ApolloCompanyProvider');
+const OsmBusinessProvider = require('./OsmBusinessProvider');
+const GooglePlacesProvider = require('./GooglePlacesProvider');
 
 // Provider registry — add new sources here.
 const registry = {
@@ -14,14 +16,34 @@ const registry = {
   apollo: new ApolloCompanyProvider(),
 };
 
+// Separate registry for automated *business discovery* sources (searchBusinesses()),
+// as opposed to the company-data-import providers above (searchCompanies()).
+const discoveryRegistry = {
+  osm: new OsmBusinessProvider(),
+  google_places: new GooglePlacesProvider(),
+};
+
 const getProvider = (key = 'csv') => {
   const p = registry[key];
   if (!p) throw new Error(`Unknown company data provider: ${key}`);
   return p;
 };
 
+const getDiscoveryProvider = (key = 'osm') => {
+  const p = discoveryRegistry[key];
+  if (!p) throw new Error(`Unknown discovery provider: ${key}`);
+  return p;
+};
+
 const listProviders = () =>
   Object.values(registry).map((p) => ({
+    key: p.key,
+    label: p.label,
+    configured: p.isConfigured(),
+  }));
+
+const listDiscoveryProviders = () =>
+  Object.values(discoveryRegistry).map((p) => ({
     key: p.key,
     label: p.label,
     configured: p.isConfigured(),
@@ -34,7 +56,12 @@ module.exports = {
   MCAProvider,
   ApiCompanyProvider,
   ApolloCompanyProvider,
+  OsmBusinessProvider,
+  GooglePlacesProvider,
   registry,
+  discoveryRegistry,
   getProvider,
+  getDiscoveryProvider,
   listProviders,
+  listDiscoveryProviders,
 };

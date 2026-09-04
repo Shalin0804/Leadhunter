@@ -94,6 +94,28 @@ async function run() {
   r = await call('GET', `/leads/${leadId}`);
   assert(r.json.data.lead.statusHistory.length >= 2, 'lead status history recorded');
 
+  // --- Contact tracking ---
+  r = await call('PATCH', `/leads/${leadId}/contact`, { method: 'PHONE', note: 'Smoke: called owner' });
+  assert(
+    r.status === 200 && r.json.data.lead.contact_status === 'CONTACTED' && r.json.data.lead.contacted_at,
+    'PATCH /leads/:id/contact sets CONTACTED + contacted_at'
+  );
+
+  r = await call('GET', `/leads?new_only=true&limit=100`);
+  assert(r.status === 200 && !r.json.data.items.some((l) => l.id === leadId), 'contacted lead excluded from new_only=true');
+
+  r = await call('PATCH', `/leads/${leadId}/contact-status`, { contact_status: 'REPLIED', note: 'Smoke: replied' });
+  assert(r.status === 200 && r.json.data.lead.contact_status === 'REPLIED' && r.json.data.lead.status === 'REPLIED', 'PATCH contact-status syncs pipeline stage');
+
+  r = await call('PATCH', `/leads/${leadId}/lead-status`, { lead_status: 'QUALIFIED' });
+  assert(r.status === 200 && r.json.data.lead.lead_status === 'QUALIFIED', 'PATCH lead-status (independent of contact_status)');
+
+  r = await call('POST', `/leads/${leadId}/recontact`, { contact_status: 'FOLLOW_UP' });
+  assert(r.status === 200 && r.json.data.lead.contact_status === 'FOLLOW_UP', 'POST /leads/:id/recontact');
+
+  r = await call('POST', '/outreach/generate', { company_id: newCompanyId, lead_id: leadId, channel: 'EMAIL' });
+  assert(r.status === 201 && r.json.data.outreach.body?.length > 0, 'POST /outreach/generate produces a draft');
+
   r = await call('POST', '/notes', { lead_id: leadId, body: 'Smoke test note' });
   assert(r.status === 201, 'POST /notes');
 
@@ -109,7 +131,23 @@ async function run() {
   assert(r.status === 200 && r.json.data.items.some((t) => t.title === 'Smoke follow-up'), 'GET /tasks?overdue=true');
 
   r = await call('GET', '/pipeline');
-  assert(r.status === 200 && r.json.data.columns.length === 9, 'GET /pipeline has 9 stages');
+  assert(r.status === 200 && r.json.data.columns.length === 12, 'GET /pipeline has 12 stages');
+
+  // --- Automation ---
+  r = await call('GET', '/automation/settings');
+  assert(r.status === 200 && Array.isArray(r.json.data.settings.locations), 'GET /automation/settings');
+
+  r = await call('PUT', '/automation/settings', { locations: ['Smoke City'], industries: ['Smoke Industry'], dailyLeadLimit: 5 });
+  assert(r.status === 200 && r.json.data.settings.dailyLeadLimit === 5, 'PUT /automation/settings persists');
+
+  r = await call('GET', '/automation/runs?limit=5');
+  assert(r.status === 200 && Array.isArray(r.json.data.items), 'GET /automation/runs (search history)');
+
+  r = await call('GET', '/automation/api-usage');
+  assert(r.status === 200 && Array.isArray(r.json.data.usage), 'GET /automation/api-usage');
+
+  r = await call('POST', '/automation/run-scheduled', null, { headers: { 'x-automation-secret': 'wrong-secret' } });
+  assert(r.status === 401 || r.status === 400, 'POST /automation/run-scheduled rejects a bad/missing secret');
 
   // --- Apollo (graceful when not configured) ---
   r = await call('GET', '/apollo/status');
