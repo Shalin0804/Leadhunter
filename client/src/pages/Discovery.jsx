@@ -26,7 +26,7 @@ const DATE_PRESETS = [
   { key: 'last_90_days', label: 'Last 90 days' },
 ];
 
-const TEMPS = ['HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'];
+const TEMPS = ['HOT', 'WARM', 'MEDIUM', 'LOW'];
 
 export default function Discovery() {
   const [params, setParams] = useSearchParams();

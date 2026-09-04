@@ -1,32 +1,49 @@
 /**
  * The automatic lead-generation pipeline:
  *
- *   TARGET -> SOURCE DISCOVERY -> DEDUPLICATION -> WEBSITE CHECK/ANALYSIS
- *   -> OPPORTUNITY DETECTION -> AI QUALIFICATION -> SCORE
- *   -> CONTACT HISTORY CHECK -> SAVE
+ *   TARGET -> MULTI-SOURCE DISCOVERY -> DEDUPLICATION -> WEBSITE CHECK/ANALYSIS
+ *   -> BUYING SIGNAL DETECTION -> OPPORTUNITY DETECTION -> AI QUALIFICATION
+ *   -> SCORE -> ENRICHMENT ELIGIBILITY -> CONTACT HISTORY CHECK -> SAVE
+ *
+ * Multi-source: every provider listed in settings.discoveryProviders runs for
+ * the same target; one provider failing (misconfigured, rate-limited, down)
+ * never stops another — see the per-provider try/catch below. Results from
+ * every provider funnel through the same dedup/scoring/save pipeline, so the
+ * same real business found by two providers becomes one Company row with
+ * multiple `lead_sources` entries (see dedupeService.findMatchingCompany).
  *
  * Cost control: cheap steps (dedupe, basic save) always run; the website
  * fetch only runs for genuinely new-or-unaudited companies; a company whose
  * lead is already past NOT_CONTACTED is skipped entirely once matched (no
- * re-enrichment spend on someone you've already engaged).
+ * re-enrichment spend on someone you've already engaged); enrichment only
+ * runs for companies that pass isEligibleForEnrichment(), capped per run.
  */
 
 const { Company, CompanyContact, CompanyWebsite, Lead, LeadSource, SearchRun, Activity } = require('../models');
 const { getDiscoveryProvider } = require('../providers');
-const { findMatchingCompany, normalizeDomain, normalizePhone, normalizeName } = require('./dedupeService');
+const { findMatchingCompany, normalizeDomain, normalizePhone, normalizeName, normalizeAddress } = require('./dedupeService');
 const { auditWebsite } = require('./websiteAuditService');
 const { detectOpportunities } = require('./opportunityDetectionService');
 const { detectAndSaveSignals } = require('./signalDetectionService');
-const { enrichCompany } = require('./enrichmentService');
+const { enrichCompany, isEligibleForEnrichment, HUNTER_NOT_CONFIGURED } = require('./enrichmentService');
 const { qualify } = require('./aiQualificationService');
 const { rescoreCompany } = require('./companyService');
 const apiUsage = require('./apiUsageService');
 const { getSettings } = require('./automationSettingsService');
 
 const LEADGEN_PROVIDER_KEY = 'leadgen'; // daily-lead-limit counter key (independent of the data-source provider)
+const MAX_LOGGED_ERRORS = 50;
 
-async function upsertBasicCompany(raw, { industry }) {
-  const existing = await findMatchingCompany({ website: raw.website, phone: raw.phone, companyName: raw.company_name });
+async function upsertBasicCompany(raw, { industry, providerKey }) {
+  const existing = await findMatchingCompany({
+    website: raw.website,
+    phone: raw.phone,
+    companyName: raw.company_name,
+    address: raw.registered_address,
+    city: raw.city,
+    externalId: raw.external_id,
+    provider: providerKey,
+  });
 
   if (existing) {
     existing.times_discovered += 1;
@@ -38,6 +55,7 @@ async function upsertBasicCompany(raw, { industry }) {
     if (!existing.registered_address && raw.registered_address) existing.registered_address = raw.registered_address;
     existing.normalized_domain = normalizeDomain(existing.website);
     existing.normalized_name = normalizeName(existing.company_name);
+    existing.normalized_address = normalizeAddress(existing.registered_address);
     if (raw.phone) existing.normalized_phone = normalizePhone(raw.phone);
     await existing.save();
     return { company: existing, created: false };
@@ -55,6 +73,7 @@ async function upsertBasicCompany(raw, { industry }) {
     normalized_domain: normalizeDomain(raw.website),
     normalized_phone: normalizePhone(raw.phone),
     normalized_name: normalizeName(raw.company_name),
+    normalized_address: normalizeAddress(raw.registered_address),
     times_discovered: 1,
     first_discovered_at: new Date(),
     last_discovered_at: new Date(),
@@ -91,6 +110,7 @@ async function analyzeWebsite(company) {
     meta_description: audit.metaDescription,
     detected_technologies: audit.technologies,
     audit_signals: audit.signals,
+    feature_flags: audit.featureFlags || null,
     last_checked_at: new Date(),
   });
   await record.save();
@@ -102,16 +122,50 @@ async function analyzeWebsite(company) {
 }
 
 /**
- * Run discovery for a single (location, industry) target. Creates its own
- * SearchRun row. Never throws — failures are recorded on the run itself.
+ * Run every configured discovery provider for one target, tagging each
+ * result with the provider that found it. A provider that is unconfigured or
+ * throws is recorded in `errors` and skipped — it never aborts the others.
  */
-async function runForTarget({ location, industry, providerKey, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings }) {
+async function discoverFromAllProviders({ location, industry, providers, limit, counters, errors, providersUsed }) {
+  const allItems = [];
+  for (const key of providers) {
+    try {
+      const provider = getDiscoveryProvider(key);
+      if (!provider.isConfigured()) {
+        errors.push({ step: `discovery:${key}`, message: `${provider.label} is not configured — skipped, other providers continue` });
+        continue; // eslint-disable-line no-continue
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const { items, apiCallsUsed } = await provider.searchBusinesses({ location, industry, limit });
+      counters.api_calls_used += apiCallsUsed;
+      // eslint-disable-next-line no-await-in-loop
+      await apiUsage.recordUsage(key, { requests: apiCallsUsed });
+      providersUsed.push(key);
+      items.forEach((item) => allItems.push({ ...item, _providerKey: key }));
+    } catch (providerErr) {
+      counters.failed_requests += 1;
+      errors.push({ step: `discovery:${key}`, message: providerErr.message });
+      // eslint-disable-next-line no-console
+      console.error(`[discovery] provider "${key}" failed:`, providerErr.message);
+    }
+  }
+  return allItems;
+}
+
+/**
+ * Run discovery for a single (location, industry) target across every
+ * configured discovery provider. Creates its own SearchRun row. Never
+ * throws — failures are recorded on the run itself.
+ */
+async function runForTarget({ location, industry, providerKey, discoveryProviders, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings }) {
+  const providers = discoveryProviders?.length ? discoveryProviders : [providerKey || settings?.provider || 'osm'];
+
   const run = await SearchRun.create({
     triggered_by: triggeredBy,
     triggered_by_user_id: triggeredByUserId || null,
     locations: [location],
     industries: [industry],
-    provider: providerKey,
+    provider: providers.join('+'),
     status: 'running',
   });
 
@@ -121,12 +175,20 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
     already_contacted_skipped: 0,
     qualified_leads: 0,
     hot_leads: 0,
+    warm_leads: 0,
+    medium_leads: 0,
     failed_requests: 0,
     api_calls_used: 0,
     enrichments_attempted: 0,
     enrichments_succeeded: 0,
+    enrichment_failures: 0,
     emails_found: 0,
+    verified_emails: 0,
+    new_companies: 0,
+    websites_analyzed: 0,
   };
+  const errors = [];
+  const providersUsed = [];
 
   try {
     const remaining = await apiUsage.remainingToday(LEADGEN_PROVIDER_KEY, dailyLimit);
@@ -135,27 +197,36 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
         status: 'completed',
         finished_at: new Date(),
         summary: { message: 'Daily lead limit already reached — skipped.' },
+        providers_used: providersUsed,
+        errors,
         ...counters,
       });
       return run;
     }
 
-    const provider = getDiscoveryProvider(providerKey);
-    const { items, apiCallsUsed } = await provider.searchBusinesses({ location, industry, limit: Math.min(remaining * 2, 50) });
-    counters.api_calls_used += apiCallsUsed;
-    await apiUsage.recordUsage(providerKey, { requests: apiCallsUsed });
+    const items = await discoverFromAllProviders({
+      location,
+      industry,
+      providers,
+      limit: Math.min(remaining * 2, 50),
+      counters,
+      errors,
+      providersUsed,
+    });
 
     for (const raw of items) {
-      if (!raw.company_name) continue;
+      if (!raw.company_name) continue; // eslint-disable-line no-continue
       counters.businesses_discovered += 1;
+      const itemProviderKey = raw._providerKey;
 
       try {
-        const { company, created } = await upsertBasicCompany(raw, { industry });
+        const { company, created } = await upsertBasicCompany(raw, { industry, providerKey: itemProviderKey });
+        if (created) counters.new_companies += 1;
 
         await LeadSource.create({
           company_id: company.id,
           search_run_id: run.id,
-          provider: providerKey,
+          provider: itemProviderKey,
           external_id: raw.external_id || null,
           source_url: raw.source_url || null,
           raw: raw.raw_tags || null,
@@ -187,10 +258,12 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
         let websiteAudit = null;
         if (settings.autoAnalyzeWebsites) {
           websiteAudit = await analyzeWebsite(company);
+          counters.websites_analyzed += 1;
         }
 
-        // Real, observable-only signals (no website, outdated site, recently registered, ...).
-        // Distinct from the `signals` table, which records a prospect explicitly asking for work.
+        // Real, observable-only signals (no website, broken site, outdated site,
+        // recently registered, ...). Distinct from the `signals` table, which
+        // records a prospect explicitly asking for work.
         if (settings.autoDetectBuyingSignals) {
           await detectAndSaveSignals(company.id);
         }
@@ -203,30 +276,47 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
           continue; // company saved for reference, but not promoted to a lead
         }
 
-        // Contact enrichment — ONLY for businesses whose score already cleared the
-        // (separately configurable) enrichment bar, and capped per run. Failure here
-        // never fails the run: enrichCompany() catches its own errors.
-        if (
-          settings.autoEnrichContacts &&
-          scoring.score >= settings.enrichmentThreshold &&
-          counters.enrichments_attempted < settings.maxEnrichmentsPerRun
-        ) {
-          counters.enrichments_attempted += 1;
-          const enrichResult = await enrichCompany(company.id, { providerKey: settings.enrichmentProvider });
-          if (enrichResult.status === 'success' && enrichResult.contact) {
-            counters.enrichments_succeeded += 1;
-            counters.emails_found += 1;
-            // Contact info may have improved contactability — rescore for the final, saved value.
-            opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
-            scoring = (await rescoreCompany(company.id))?.result || scoring;
-          } else if (enrichResult.status === 'failed') {
-            // eslint-disable-next-line no-console
-            console.error(`[enrichment] company ${company.id} failed: ${enrichResult.reason}`);
+        // Contact enrichment — gated by isEligibleForEnrichment() (score threshold OR
+        // near-threshold-with-website OR strong fit OR high buying signal), capped per
+        // run. Failure here never fails the run: enrichCompany() catches its own errors.
+        if (settings.autoEnrichContacts && counters.enrichments_attempted < settings.maxEnrichmentsPerRun) {
+          const freshForEligibility = await Company.findByPk(company.id);
+          const eligibility = isEligibleForEnrichment({
+            scoring,
+            company: freshForEligibility,
+            minScore: settings.enrichmentThreshold,
+          });
+          if (eligibility.eligible) {
+            // eslint-disable-next-line no-await-in-loop
+            const enrichResult = await enrichCompany(company.id, {
+              providerKey: settings.enrichmentProvider,
+              refreshDays: settings.enrichmentRefreshDays,
+            });
+            // Only count it as a real "attempt" if we actually reached the provider —
+            // a provider that isn't configured never made an HTTP call at all.
+            if (!(enrichResult.status === 'skipped' && enrichResult.reason === HUNTER_NOT_CONFIGURED)) {
+              counters.enrichments_attempted += 1;
+            }
+            if (enrichResult.status === 'success' && enrichResult.contact) {
+              counters.enrichments_succeeded += 1;
+              counters.emails_found += 1;
+              if (['VERIFIED', 'VALID'].includes(enrichResult.contact.verification_status)) counters.verified_emails += 1;
+              // Contact info may have improved contactability — rescore for the final, saved value.
+              opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
+              scoring = (await rescoreCompany(company.id))?.result || scoring;
+            } else if (enrichResult.status === 'failed') {
+              counters.enrichment_failures += 1;
+              errors.push({ step: `enrichment:company_${company.id}`, message: enrichResult.reason });
+              // eslint-disable-next-line no-console
+              console.error(`[enrichment] company ${company.id} failed: ${enrichResult.reason}`);
+            }
           }
         }
 
         counters.qualified_leads += 1;
         if (scoring.temperature === 'HOT') counters.hot_leads += 1;
+        else if (scoring.temperature === 'WARM') counters.warm_leads += 1;
+        else if (scoring.temperature === 'MEDIUM') counters.medium_leads += 1;
 
         const freshCompany = await Company.findByPk(company.id);
         const qualification = settings.autoSaveQualifiedLeads
@@ -257,7 +347,7 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
             company_id: company.id,
             lead_id: lead.id,
             type: 'discovered',
-            title: `Discovered via automation (${providerKey})`,
+            title: `Discovered via automation (${itemProviderKey})`,
             body: `${location} · ${industry}`,
             occurred_at: new Date(),
           });
@@ -266,7 +356,7 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
               company_id: company.id,
               lead_id: lead.id,
               type: 'website_analyzed',
-              title: `Website analyzed: ${websiteAudit.health}`,
+              title: `Website analyzed: ${websiteAudit.status === 'live' ? websiteAudit.health : websiteAudit.status}`,
               body: websiteAudit.signals?.join('; ') || null,
               occurred_at: new Date(),
             });
@@ -285,18 +375,27 @@ async function runForTarget({ location, industry, providerKey, minLeadScore, dai
         }
       } catch (itemErr) {
         counters.failed_requests += 1;
+        errors.push({ step: `item:${raw.company_name || 'unknown'}`, message: itemErr.message });
         // eslint-disable-next-line no-console
         console.error('[discovery] item failed:', itemErr.message);
       }
     }
 
-    await run.update({ status: 'completed', finished_at: new Date(), ...counters });
+    await run.update({
+      status: 'completed',
+      finished_at: new Date(),
+      providers_used: providersUsed,
+      errors: errors.slice(0, MAX_LOGGED_ERRORS),
+      ...counters,
+    });
     return run;
   } catch (err) {
     await run.update({
       status: 'failed',
       finished_at: new Date(),
       error_message: err.message,
+      providers_used: providersUsed,
+      errors: errors.slice(0, MAX_LOGGED_ERRORS),
       ...counters,
     });
     return run;
@@ -312,6 +411,8 @@ async function runFullDiscovery({ triggeredBy = 'manual', triggeredByUserId = nu
     return { runs, message: 'No locations/industries configured.' };
   }
 
+  const discoveryProviders = settings.discoveryProviders?.length ? settings.discoveryProviders : [settings.provider];
+
   for (const location of settings.locations) {
     for (const industry of settings.industries) {
       // eslint-disable-next-line no-await-in-loop
@@ -319,6 +420,7 @@ async function runFullDiscovery({ triggeredBy = 'manual', triggeredByUserId = nu
         location,
         industry,
         providerKey: settings.provider,
+        discoveryProviders,
         minLeadScore: settings.minLeadScore,
         dailyLimit: settings.dailyLeadLimit,
         triggeredBy,

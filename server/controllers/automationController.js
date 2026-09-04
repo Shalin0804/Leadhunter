@@ -35,6 +35,7 @@ exports.runNow = async (req, res) => {
       location,
       industry,
       providerKey: settings.provider,
+      discoveryProviders: settings.discoveryProviders?.length ? settings.discoveryProviders : [settings.provider],
       minLeadScore: settings.minLeadScore,
       dailyLimit: settings.dailyLeadLimit,
       triggeredBy: 'manual',

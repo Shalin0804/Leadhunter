@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw } from 'react-icons/fi';
+import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw, FiClock, FiStar, FiFileText, FiCheckCircle, FiXCircle } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
@@ -10,7 +10,7 @@ import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS } from '..
 
 const STATUSES = Object.keys(STATUS_LABELS);
 const CONTACT_STATUSES = Object.keys(CONTACT_STATUS_LABELS);
-const TEMPS = ['HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'];
+const TEMPS = ['HOT', 'WARM', 'MEDIUM', 'LOW'];
 const STRENGTH_ORDER = { HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
 
 const CONTACT_TONE = {
@@ -70,6 +70,19 @@ export default function Leads() {
   );
 
   const { data, loading, error, reload } = useApi(() => leadApi.list(query), [JSON.stringify(query)]);
+
+  // One-click pipeline moves for the prospecting queue. Contact history itself
+  // (contact_status) never gets touched by anything but an explicit user action —
+  // these buttons are that explicit action, same as opening a modal would be.
+  const quickAction = async (leadId, contact_status) => {
+    try {
+      await leadApi.updateContactStatus(leadId, { contact_status });
+      toast.success(`Updated to ${CONTACT_STATUS_LABELS[contact_status]}`);
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
 
   return (
     <div className="page">
@@ -247,7 +260,22 @@ export default function Leads() {
                                 <FiRotateCcw />
                               </button>
                             )}
-                            <Link className="icon-btn" to={`/leads/${l.id}`} title="Open">
+                            <button className="icon-btn" title="Follow up" onClick={() => quickAction(l.id, 'FOLLOW_UP')}>
+                              <FiClock />
+                            </button>
+                            <button className="icon-btn" title="Mark interested" onClick={() => quickAction(l.id, 'INTERESTED')}>
+                              <FiStar />
+                            </button>
+                            <button className="icon-btn" title="Send proposal" onClick={() => quickAction(l.id, 'PROPOSAL_SENT')}>
+                              <FiFileText />
+                            </button>
+                            <button className="icon-btn" title="Won" onClick={() => quickAction(l.id, 'WON')}>
+                              <FiCheckCircle />
+                            </button>
+                            <button className="icon-btn" title="Lost" onClick={() => quickAction(l.id, 'LOST')}>
+                              <FiXCircle />
+                            </button>
+                            <Link className="icon-btn" to={`/leads/${l.id}`} title="View">
                               <FiExternalLink />
                             </Link>
                           </div>

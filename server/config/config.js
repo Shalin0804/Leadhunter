@@ -53,6 +53,15 @@ module.exports = {
     apiKey: env('HUNTER_API_KEY', ''),
   },
 
+  yelp: {
+    apiKey: env('YELP_API_KEY', ''),
+  },
+
+  enrichment: {
+    minScore: parseInt(env('ENRICHMENT_MIN_SCORE', '50'), 10),
+    refreshDays: parseInt(env('ENRICHMENT_REFRESH_DAYS', '30'), 10),
+  },
+
   automation: {
     // Shared secret an external cron service must send to trigger a scheduled run.
     triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),

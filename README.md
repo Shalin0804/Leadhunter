@@ -59,49 +59,73 @@ ping — instructions included) and for the optional Google Places upgrade.
 
 Set `HUNTER_API_KEY` (free at [hunter.io](https://hunter.io) — 25 domain
 searches + 50 verifications/month) to enable automatic email discovery for
-**qualified leads only**:
+**eligible leads only** — eligibility is broader than a single score cutoff
+(see `server/services/enrichmentService.js#isEligibleForEnrichment`):
 
 ```
 Discover → Dedupe → Website check → Score
-  → IF score >= enrichmentThreshold (default 60) → Hunter domain search
-  → best candidate → Hunter email verifier → save
+  → IF eligible (score >= ENRICHMENT_MIN_SCORE, default 50; OR near-threshold
+     + website; OR strong Codefloor fit + website; OR high buying signal + website)
+  → Hunter domain search → best candidate → Hunter email verifier → save
 ```
 
-- Every enriched email carries `email_status` (`VERIFIED` only if Hunter's
-  verifier endpoint actually ran and said so — never just assumed),
-  `confidence`, and `source: 'hunter'`.
+- Every enriched contact carries `verification_status` (`VERIFIED` only if
+  Hunter's verifier endpoint actually ran and said so — never just assumed),
+  `confidence`, `source` (the enrichment provider), `contact_name`, `job_title`
+  (contact role), `linkedin_url`, and `enriched_at`.
 - Cost control: skipped entirely if the company already has a `VERIFIED`/`VALID`
-  email, was enriched in the last 30 days, or has no website (no domain to
-  search); capped at `maxEnrichmentsPerRun` per run.
+  email, was enriched within `ENRICHMENT_REFRESH_DAYS` (default 30), or has no
+  website (no domain to search); capped at `maxEnrichmentsPerRun` per run.
 - A failed enrichment never fails the whole run — it's recorded on the company
   (`enrichment_status`, `enrichment_error`) and the run continues.
 - Without a key, the pipeline runs exactly the same but skips this step —
-  `POST /api/companies/:id/enrich` returns a clear "Hunter.io is not
-  configured" error rather than pretending to succeed.
+  `POST /api/companies/:id/enrich` returns the literal reason
+  `HUNTER_NOT_CONFIGURED` rather than pretending to succeed.
+
+### Multi-source discovery
+
+Discovery runs through a `discoveryRegistry` of independent providers — each
+one implements `searchBusinesses()` and normalizes to the same shape. A
+provider that isn't configured, or fails mid-run, is skipped and logged; it
+never stops the others (Yelp down/missing key → OSM keeps going).
+
+| Provider | Key | Needs | Notes |
+|---|---|---|---|
+| OpenStreetMap | `osm` | nothing (free) | default, always available |
+| Yelp Fusion | `yelp` | `YELP_API_KEY` | does **not** return a business's own website — only its Yelp profile page |
+| Google Places | `google_places` | `GOOGLE_PLACES_API_KEY` | drop-in upgrade, implemented but optional |
+
+The same real business found by two providers (e.g. OSM and Yelp both
+returning "Rajvadu Restaurant") collapses into one `Company` row with
+multiple `lead_sources` entries — see `dedupeService.findMatchingCompany`'s
+priority chain: domain → phone → provider external id → normalized name+city
+→ normalized address → normalized name (fuzzy fallback).
 
 ### Lead scoring breakdown (max 100)
 
 | Category | Max | Source |
 |---|---|---|
-| Website Opportunity | 20 | Live website audit (no website / outdated / poor / good / excellent) |
-| Software Opportunity | 20 | Detected CRM/booking/appointment/e-commerce/custom-software opportunities |
+| Website Opportunity | 20 | Live website audit (no website / inaccessible / broken / outdated / poor / good / excellent) |
+| Software Opportunity | 20 | Detected CRM/booking/ordering/appointment/e-commerce/custom-software opportunities |
 | Business Growth | 15 | Real incorporation date or first-discovered recency |
 | Buying Signal | 20 | An explicit ask (highest) or an auto-detected signal (below) |
-| Contactability | 10 | Verified email + phone + website (10) down to nothing (0) |
+| Contactability | 10 | Additive: +3 verified email, +2 plausible email, +2 phone, +1 contact page, +1 LinkedIn/profile, +1 contact form, +1 multiple methods |
 | Codefloor Fit | 15 | Target industry + target location match |
 
-Every company profile shows the full breakdown with the reason for each
-category's points — nothing is a black box.
+Priority bands: **80-100 HOT · 60-79 WARM · 50-59 MEDIUM · 0-49 LOW.** Every
+company profile shows the full breakdown with the reason for each category's
+points — nothing is a black box.
 
 ### Automatic signal detection
 
 Distinct from the manually-logged "buying signals" (someone asked for work).
 These are inferred only from data this app has actually collected — no
-website, an outdated site, recent registration, an online-booking gap for a
-hotel/restaurant/clinic, an e-commerce gap for a retailer, active social
-presence. **Not implemented** (no reliable public data source available):
-hiring signals, expansion/new-branch signals, new-product signals — these are
-not fabricated.
+website, a broken website (server error), an inaccessible website
+(DNS/timeout), an outdated site, recent registration, a contact-info gap, an
+online-booking/ordering/appointment gap for the relevant industry, an
+e-commerce gap for a retailer, active social presence. **Not implemented** (no
+reliable public data source available): hiring signals, expansion/new-branch
+signals, new-product signals — these are not fabricated.
 
 ## Apollo.io (live company search + enrichment)
 

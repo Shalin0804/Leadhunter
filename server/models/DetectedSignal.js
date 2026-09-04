@@ -15,6 +15,11 @@ const SIGNAL_TYPES = [
   'ACTIVE_SOCIAL_PRESENCE',
   'ONLINE_BOOKING_GAP',
   'ECOMMERCE_OPPORTUNITY',
+  // Prospecting Engine 2.0 additions — appended, never renamed, so existing rows stay valid.
+  'BROKEN_WEBSITE',
+  'ONLINE_ORDERING_GAP',
+  'APPOINTMENT_GAP',
+  'CONTACT_GAP',
 ];
 
 const SIGNAL_STRENGTHS = ['NONE', 'LOW', 'MEDIUM', 'HIGH'];

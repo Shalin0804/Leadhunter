@@ -16,7 +16,8 @@ module.exports = (sequelize) => {
       locations: { type: DataTypes.JSON, allowNull: true },
       industries: { type: DataTypes.JSON, allowNull: true },
       opportunities: { type: DataTypes.JSON, allowNull: true },
-      provider: { type: DataTypes.STRING(40), allowNull: true },
+      provider: { type: DataTypes.STRING(80), allowNull: true }, // legacy: single/joined provider key(s) as a string
+      providers_used: { type: DataTypes.JSON, allowNull: true }, // structured: which discovery providers actually ran this target
 
       started_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       finished_at: { type: DataTypes.DATE, allowNull: true },
@@ -31,6 +32,14 @@ module.exports = (sequelize) => {
       enrichments_attempted: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       enrichments_succeeded: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       emails_found: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+
+      new_companies: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      websites_analyzed: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      enrichment_failures: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      verified_emails: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      warm_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      medium_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      errors: { type: DataTypes.JSON, allowNull: true }, // capped array of {provider|step, message} — never throws the run
 
       error_message: { type: DataTypes.TEXT, allowNull: true },
       summary: { type: DataTypes.JSON, allowNull: true },

@@ -28,6 +28,8 @@ module.exports = {
   // --- Website Opportunity: scored from the live website audit health rating ---
   websiteOpportunityByHealth: {
     no_website: 20,
+    broken: 18, // has a website, but it's actively erroring — nearly as bad as none
+    inaccessible: 15, // DNS/timeout failure — can't confirm it's dead, but can't reach it either
     outdated: 16,
     poor: 12,
     fair: 6,
@@ -129,13 +131,12 @@ module.exports = {
     OTHER: null,
   },
 
-  // score >= threshold  ->  temperature
+  // score >= threshold -> temperature (Prospecting Engine 2.0 priority tiers)
   temperatureBands: [
-    { min: 90, temperature: 'HOT' },
-    { min: 75, temperature: 'HIGH' },
-    { min: 50, temperature: 'WARM' },
-    { min: 30, temperature: 'LOW' },
-    { min: 0, temperature: 'NOT_QUALIFIED' },
+    { min: 80, temperature: 'HOT' },
+    { min: 60, temperature: 'WARM' },
+    { min: 50, temperature: 'MEDIUM' },
+    { min: 0, temperature: 'LOW' },
   ],
 
   opportunityLevels: [

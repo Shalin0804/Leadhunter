@@ -6,6 +6,7 @@ const ApiCompanyProvider = require('./ApiCompanyProvider');
 const ApolloCompanyProvider = require('./ApolloCompanyProvider');
 const OsmBusinessProvider = require('./OsmBusinessProvider');
 const GooglePlacesProvider = require('./GooglePlacesProvider');
+const YelpBusinessProvider = require('./YelpBusinessProvider');
 const HunterProvider = require('./HunterProvider');
 
 // Provider registry — add new sources here.
@@ -22,6 +23,7 @@ const registry = {
 const discoveryRegistry = {
   osm: new OsmBusinessProvider(),
   google_places: new GooglePlacesProvider(),
+  yelp: new YelpBusinessProvider(),
 };
 
 // Separate registry for *contact enrichment* sources (domainSearch()/verifyEmail()).
@@ -65,6 +67,7 @@ module.exports = {
   ApolloCompanyProvider,
   OsmBusinessProvider,
   GooglePlacesProvider,
+  YelpBusinessProvider,
   HunterProvider,
   registry,
   discoveryRegistry,

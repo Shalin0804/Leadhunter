@@ -145,6 +145,7 @@ button { font-family: inherit; }
 .badge.hot { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
 .badge.high { background: #fdeede; color: #b45309; border-color: transparent; }
 .badge.warm { background: #fef7e0; color: #a16207; border-color: transparent; }
+.badge.medium { background: #eef2ff; color: #4338ca; border-color: transparent; }
 .badge.low { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
 .badge.not_qualified { background: var(--surface-2); color: var(--text-faint); }
 .badge.green { background: var(--success-soft); color: var(--success); border-color: transparent; }

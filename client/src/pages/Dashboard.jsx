@@ -16,14 +16,17 @@ import { useApi } from '../hooks/useApi';
 import { dashboardApi } from '../services/endpoints';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, EmptyState } from '../components/ui';
 import { BarChartBox, LineChartBox, DonutChartBox } from '../components/charts';
-import { fmtDate, fmtNumber } from '../utils/format';
+import { fmtDate, fmtDateTime, fmtNumber } from '../utils/format';
 
 const CARD_META = [
   { key: 'totalCompanies', label: 'Total Companies', icon: <FiBriefcase /> },
   { key: 'newCompanies', label: 'New Companies (30d)', icon: <FiZap /> },
   { key: 'qualifiedLeads', label: 'Qualified Leads', icon: <FiCheckCircle /> },
   { key: 'hotLeads', label: 'Hot Leads', icon: <FiThermometer /> },
+  { key: 'warmLeads', label: 'Warm Leads', icon: <FiThermometer /> },
+  { key: 'mediumLeads', label: 'Medium Leads', icon: <FiThermometer /> },
   { key: 'contactedLeads', label: 'Contacted', icon: <FiPhoneCall /> },
+  { key: 'interestedLeads', label: 'Interested', icon: <FiRadio /> },
   { key: 'activeSignals', label: 'Active Buying Signals', icon: <FiRadio /> },
   { key: 'followUpsDue', label: 'Follow-ups Due', icon: <FiClock /> },
   { key: 'meetings', label: 'Meetings', icon: <FiCalendar /> },
@@ -35,6 +38,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { data, loading, error, reload } = useApi(() => dashboardApi.stats(), []);
   const { data: opps } = useApi(() => dashboardApi.opportunities(8), []);
+  const { data: automation } = useApi(() => dashboardApi.automationStatus(), []);
 
   if (loading) return <Loader label="Building dashboard…" />;
   if (error)
@@ -106,6 +110,15 @@ export default function Dashboard() {
             <BarChartBox data={charts.pipeline || []} xKey="status" yKey="count" name="Leads" color="#14b8a6" />
           </div>
         </Card>
+        <Card title="Discovery sources">
+          <div className="chart-box">
+            {charts.discoverySources?.length ? (
+              <DonutChartBox data={charts.discoverySources} nameKey="provider" valueKey="count" />
+            ) : (
+              <EmptyState title="No discovery activity yet" message="Run automatic lead discovery to populate this." />
+            )}
+          </div>
+        </Card>
         <Card title="Lead conversion rate">
           <div className="chart-box" style={{ display: 'grid', placeItems: 'center' }}>
             <div style={{ textAlign: 'center' }}>
@@ -132,6 +145,55 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      <Card
+        title="Automation Status"
+        actions={
+          <Link className="btn btn-sm" to="/automation">
+            Automation settings
+          </Link>
+        }
+      >
+        {automation ? (
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+            <div>
+              <span className="text-muted text-sm">Status</span>
+              <div>
+                <span className={`badge ${automation.enabled ? (automation.running ? 'blue' : 'green') : 'gray'}`}>
+                  {automation.running ? 'Running now' : automation.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <span className="text-muted text-sm">Discovery sources</span>
+              <div className="text-sm">{(automation.discoveryProviders || []).join(', ') || '—'}</div>
+            </div>
+            <div>
+              <span className="text-muted text-sm">Last run</span>
+              <div className="text-sm">{automation.lastRun ? fmtDateTime(automation.lastRun.started_at) : 'Never'}</div>
+            </div>
+            <div>
+              <span className="text-muted text-sm">Next run (est.)</span>
+              <div className="text-sm">{automation.nextRunEstimate ? fmtDateTime(automation.nextRunEstimate) : '—'}</div>
+            </div>
+            {automation.lastRun && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span className="text-muted text-sm">Last run results</span>
+                <div className="text-sm">
+                  {automation.lastRun.businesses_discovered} discovered · {automation.lastRun.new_companies} new ·{' '}
+                  {automation.lastRun.duplicates_skipped} duplicates · {automation.lastRun.qualified_leads} qualified (
+                  {automation.lastRun.hot_leads} hot / {automation.lastRun.warm_leads} warm / {automation.lastRun.medium_leads} medium) ·{' '}
+                  {automation.lastRun.enrichments_succeeded}/{automation.lastRun.enrichments_attempted} enriched ·{' '}
+                  {automation.lastRun.verified_emails} verified emails
+                  {automation.lastRun.errors?.length ? ` · ${automation.lastRun.errors.length} error(s)` : ''}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState title="No automation runs yet" message="Configure and run automatic lead discovery from Automation settings." />
+        )}
+      </Card>
 
       <Card
         title="Best Opportunities"

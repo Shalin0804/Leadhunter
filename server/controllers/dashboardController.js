@@ -1,6 +1,8 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { Company, Lead, Task, Activity, User, Signal, SearchRun } = require('../models');
+const { Company, Lead, Task, Activity, User, Signal, SearchRun, LeadSource } = require('../models');
 const { ok } = require('../utils/http');
+const { getSettings } = require('../services/automationSettingsService');
+const { listDiscoveryProviders } = require('../providers');
 
 const LeadModel = Lead;
 const COUNT_DESC = [fn('COUNT', col('id')), 'DESC'];
@@ -14,9 +16,10 @@ const numify = (rows, ...fields) =>
   });
 
 // Portable "bucket the lead score" expression (raw column name is identical on both dialects).
+// Buckets mirror the 4-tier priority bands: 80-100 HOT, 60-79 WARM, 50-59 MEDIUM, 0-49 LOW.
 const SCORE_BUCKET =
-  "CASE WHEN lead_score >= 90 THEN '90-100' WHEN lead_score >= 75 THEN '75-89' " +
-  "WHEN lead_score >= 50 THEN '50-74' WHEN lead_score >= 30 THEN '30-49' ELSE '0-29' END";
+  "CASE WHEN lead_score >= 80 THEN '80-100 (HOT)' WHEN lead_score >= 60 THEN '60-79 (WARM)' " +
+  "WHEN lead_score >= 50 THEN '50-59 (MEDIUM)' ELSE '0-49 (LOW)' END";
 
 const daysAgoISO = (n) => new Date(Date.now() - n * 86400000);
 
@@ -40,6 +43,9 @@ exports.stats = async (req, res) => {
     notContactedLeads,
     repliedLeads,
     highPriorityLeads,
+    warmLeads,
+    mediumLeads,
+    interestedLeads,
   ] = await Promise.all([
     Company.count(),
     Company.count({ where: { date_of_incorporation: { [Op.gte]: recentDate } } }),
@@ -57,10 +63,13 @@ exports.stats = async (req, res) => {
     Lead.count({ where: { contact_status: 'NOT_CONTACTED' } }),
     Lead.count({ where: { contact_status: 'REPLIED' } }),
     Lead.count({ where: { priority: 'HIGH' } }),
+    Lead.count({ where: { lead_temperature: 'WARM' } }),
+    Lead.count({ where: { lead_temperature: 'MEDIUM' } }),
+    Lead.count({ where: { contact_status: 'INTERESTED' } }),
   ]);
 
   // charts — run in parallel
-  const [newByDay, byIndustry, byState, scoreBucketsRaw, pipeline] = await Promise.all([
+  const [newByDay, byIndustry, byState, scoreBucketsRaw, pipeline, discoverySourcesRaw] = await Promise.all([
     Company.findAll({
       where: { date_of_incorporation: { [Op.gte]: daysAgoISO(60).toISOString().slice(0, 10) } },
       attributes: [['date_of_incorporation', 'day'], [fn('COUNT', col('id')), 'count']],
@@ -92,9 +101,15 @@ exports.stats = async (req, res) => {
       group: ['status'],
       raw: true,
     }),
+    LeadSource.findAll({
+      attributes: ['provider', [fn('COUNT', col('id')), 'count']],
+      group: ['provider'],
+      order: [COUNT_DESC],
+      raw: true,
+    }),
   ]);
 
-  const scoreBuckets = ['0-29', '30-49', '50-74', '75-89', '90-100'].map((b) => ({
+  const scoreBuckets = ['0-49 (LOW)', '50-59 (MEDIUM)', '60-79 (WARM)', '80-100 (HOT)'].map((b) => ({
     bucket: b,
     count: Number(scoreBucketsRaw.find((r) => r.bucket === b)?.count || 0),
   }));
@@ -118,6 +133,9 @@ exports.stats = async (req, res) => {
       notContactedLeads,
       repliedLeads,
       highPriorityLeads,
+      warmLeads,
+      mediumLeads,
+      interestedLeads,
     },
     charts: {
       newByDay: numify(newByDay, 'count'),
@@ -128,8 +146,50 @@ exports.stats = async (req, res) => {
         const row = pipeline.find((p) => p.status === s);
         return { status: s, count: row ? Number(row.count) : 0, value: row ? Number(row.value) : 0 };
       }),
+      discoverySources: numify(discoverySourcesRaw, 'count'),
       conversionRate,
     },
+  });
+};
+
+// Automation panel for the dashboard: is it enabled/running right now, when did
+// it last run and what happened, and (best-effort) when will it run next.
+exports.automationStatus = async (req, res) => {
+  const settings = await getSettings();
+  const { isRunning, nextRunEstimate } = require('../jobs/automationScheduler');
+
+  const lastRun = await SearchRun.findOne({ order: [['started_at', 'DESC']] });
+
+  return ok(res, {
+    enabled: settings.enabled,
+    running: isRunning(),
+    schedule: settings.schedule,
+    discoveryProviders: settings.discoveryProviders?.length ? settings.discoveryProviders : [settings.provider],
+    configuredDiscoveryProviders: listDiscoveryProviders(),
+    nextRunEstimate: nextRunEstimate(settings),
+    lastRun: lastRun
+      ? {
+          id: lastRun.id,
+          status: lastRun.status,
+          started_at: lastRun.started_at,
+          finished_at: lastRun.finished_at,
+          locations: lastRun.locations,
+          industries: lastRun.industries,
+          providers_used: lastRun.providers_used,
+          businesses_discovered: lastRun.businesses_discovered,
+          new_companies: lastRun.new_companies,
+          duplicates_skipped: lastRun.duplicates_skipped,
+          qualified_leads: lastRun.qualified_leads,
+          hot_leads: lastRun.hot_leads,
+          warm_leads: lastRun.warm_leads,
+          medium_leads: lastRun.medium_leads,
+          enrichments_attempted: lastRun.enrichments_attempted,
+          enrichments_succeeded: lastRun.enrichments_succeeded,
+          enrichment_failures: lastRun.enrichment_failures,
+          verified_emails: lastRun.verified_emails,
+          errors: lastRun.errors,
+        }
+      : null,
   });
 };
 

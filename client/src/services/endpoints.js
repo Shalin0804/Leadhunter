@@ -20,6 +20,7 @@ export const dashboardApi = {
   stats: () => unwrap(api.get('/dashboard/stats')),
   opportunities: (limit = 10) => unwrap(api.get(`/dashboard/opportunities${qs({ limit })}`)),
   activity: () => unwrap(api.get('/dashboard/activity')),
+  automationStatus: () => unwrap(api.get('/dashboard/automation-status')),
 };
 
 export const companyApi = {

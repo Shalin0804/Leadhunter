@@ -51,12 +51,12 @@ export const initials = (name = '') =>
     .map((s) => s[0]?.toUpperCase())
     .join('') || '?';
 
+// 4-tier priority (Prospecting Engine 2.0): 80-100 HOT, 60-79 WARM, 50-59 MEDIUM, 0-49 LOW.
 export const TEMP_LABELS = {
   HOT: 'Hot',
-  HIGH: 'High',
   WARM: 'Warm',
+  MEDIUM: 'Medium',
   LOW: 'Low',
-  NOT_QUALIFIED: 'Not qualified',
 };
 
 export const STATUS_LABELS = {

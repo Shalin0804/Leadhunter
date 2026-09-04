@@ -151,6 +151,9 @@ alone becomes reliable and the external ping is just a harmless backup.
 | `GOOGLE_PLACES_API_KEY` | Render | optional — drop-in upgrade for automatic business discovery (default is free OpenStreetMap) |
 | `AUTOMATION_TRIGGER_SECRET` | Render | required for the external cron trigger above |
 | `HUNTER_API_KEY` | Render | optional — real email enrichment for qualified leads (free at hunter.io, 25 searches + 50 verifications/month) |
+| `YELP_API_KEY` | Render | optional — additional business-discovery source (Yelp Fusion API); OSM keeps running if unset |
+| `ENRICHMENT_MIN_SCORE` | Render | default `50` — lead score threshold for enrichment eligibility (see enrichmentService.isEligibleForEnrichment) |
+| `ENRICHMENT_REFRESH_DAYS` | Render | default `30` — days before a company already enriched can be re-enriched |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data

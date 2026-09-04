@@ -38,6 +38,11 @@ const CONTACT_STATUSES = [
 
 const CONTACT_METHODS = ['EMAIL', 'WHATSAPP', 'PHONE', 'LINKEDIN', 'INSTAGRAM', 'OTHER'];
 
+// Score-derived priority tier (Prospecting Engine 2.0): 80-100 HOT, 60-79 WARM,
+// 50-59 MEDIUM, 0-49 LOW. Replaces the earlier 5-tier HOT/HIGH/WARM/LOW/NOT_QUALIFIED
+// scale — see seed/migrate.js for the one-time data remap (HIGH->WARM, NOT_QUALIFIED->LOW).
+const LEAD_TEMPERATURES = ['HOT', 'WARM', 'MEDIUM', 'LOW'];
+
 // contact_status values that mean "don't surface this as a fresh new lead again".
 const ALREADY_ENGAGED_CONTACT_STATUSES = CONTACT_STATUSES.filter((s) => s !== 'NOT_CONTACTED');
 
@@ -79,16 +84,16 @@ module.exports = (sequelize) => {
 
       lead_score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       lead_temperature: {
-        type: DataTypes.ENUM('HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'),
+        type: DataTypes.ENUM(...LEAD_TEMPERATURES),
         allowNull: false,
-        defaultValue: 'NOT_QUALIFIED',
+        defaultValue: 'LOW',
       },
       recommended_service: { type: DataTypes.STRING(160), allowNull: true },
 
       // Populated by the automation pipeline's rule-based "AI qualification" step.
-      ai_problem: { type: DataTypes.TEXT, allowNull: true },
+      ai_problem: { type: DataTypes.TEXT, allowNull: true }, // opportunity_reason
       ai_evidence: { type: DataTypes.JSON, allowNull: true },
-      ai_sales_angle: { type: DataTypes.TEXT, allowNull: true },
+      ai_sales_angle: { type: DataTypes.TEXT, allowNull: true }, // outreach_angle
 
       estimated_value: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
       next_follow_up_at: { type: DataTypes.DATE, allowNull: true },
@@ -118,6 +123,7 @@ module.exports = (sequelize) => {
   Lead.LEAD_QUALIFICATION_STATUSES = LEAD_QUALIFICATION_STATUSES;
   Lead.CONTACT_STATUSES = CONTACT_STATUSES;
   Lead.CONTACT_METHODS = CONTACT_METHODS;
+  Lead.LEAD_TEMPERATURES = LEAD_TEMPERATURES;
   Lead.ALREADY_ENGAGED_CONTACT_STATUSES = ALREADY_ENGAGED_CONTACT_STATUSES;
   Lead.CONTACT_TO_PIPELINE = CONTACT_TO_PIPELINE;
   return Lead;
@@ -127,5 +133,6 @@ module.exports.LEAD_STATUSES = LEAD_STATUSES;
 module.exports.LEAD_QUALIFICATION_STATUSES = LEAD_QUALIFICATION_STATUSES;
 module.exports.CONTACT_STATUSES = CONTACT_STATUSES;
 module.exports.CONTACT_METHODS = CONTACT_METHODS;
+module.exports.LEAD_TEMPERATURES = LEAD_TEMPERATURES;
 module.exports.ALREADY_ENGAGED_CONTACT_STATUSES = ALREADY_ENGAGED_CONTACT_STATUSES;
 module.exports.CONTACT_TO_PIPELINE = CONTACT_TO_PIPELINE;

@@ -48,12 +48,41 @@ async function countTables() {
   return Number(rows[0].n);
 }
 
+/**
+ * One-time data remap ahead of the lead_temperature enum shrinking from
+ * 5 values (HOT/HIGH/WARM/LOW/NOT_QUALIFIED) to 4 (HOT/WARM/MEDIUM/LOW) —
+ * Postgres can't cast a row's existing value to an enum that no longer
+ * contains it, so any HIGH/NOT_QUALIFIED rows must be remapped first.
+ * Safe to run every time: a no-op once no rows hold the old values.
+ */
+async function remapLegacyTemperatureValues() {
+  const tables = [
+    { table: 'companies', column: 'lead_temperature' },
+    { table: 'leads', column: 'lead_temperature' },
+    { table: 'lead_scores', column: 'temperature' },
+  ];
+  for (const { table, column } of tables) {
+    try {
+      await sequelize.query(`UPDATE "${table}" SET "${column}" = 'WARM' WHERE "${column}" = 'HIGH'`);
+      await sequelize.query(`UPDATE "${table}" SET "${column}" = 'LOW' WHERE "${column}" = 'NOT_QUALIFIED'`);
+    } catch (err) {
+      // Table/column/enum value doesn't exist yet (fresh DB, or already migrated) — fine.
+      if (!/does not exist|invalid input value/i.test(err.message)) throw err;
+    }
+  }
+}
+
 async function run() {
   await ensureMysqlDatabase();
   await sequelize.authenticate();
   console.log(`[migrate] connected (${config.db.dialect})`);
 
   const tableCount = await countTables();
+
+  if (tableCount > 0 && !FRESH) {
+    await remapLegacyTemperatureValues();
+    console.log('[migrate] legacy lead_temperature values remapped (HIGH->WARM, NOT_QUALIFIED->LOW)');
+  }
 
   if (FRESH) {
     console.log('[migrate] --fresh: dropping and recreating all tables');

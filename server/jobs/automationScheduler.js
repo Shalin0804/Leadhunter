@@ -48,6 +48,39 @@ async function fire(triggeredBy = 'scheduled') {
   }
 }
 
+/**
+ * Best-effort "next run" estimate for the dashboard — computed directly from
+ * the fixed schedule presets. Returns null for a disabled scheduler or a
+ * custom cron expression (not worth hand-rolling a cron parser for a display
+ * hint; the run still fires correctly either way).
+ */
+function nextRunEstimate(settings) {
+  if (!settings.enabled) return null;
+  const now = new Date();
+  if (settings.schedule === 'daily_9am') {
+    const next = new Date(now);
+    next.setHours(9, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next;
+  }
+  if (settings.schedule === 'every_6h' || settings.schedule === 'every_12h') {
+    const stepH = settings.schedule === 'every_6h' ? 6 : 12;
+    const next = new Date(now);
+    next.setMinutes(0, 0, 0);
+    next.setHours(Math.ceil((next.getHours() + 1) / stepH) * stepH);
+    return next;
+  }
+  if (settings.schedule === 'weekly') {
+    const next = new Date(now);
+    next.setHours(9, 0, 0, 0);
+    let diff = (1 - next.getDay() + 7) % 7; // next Monday
+    if (diff === 0 && next <= now) diff = 7;
+    next.setDate(next.getDate() + diff);
+    return next;
+  }
+  return null; // custom cron — not estimated
+}
+
 /** (Re)build the cron job from current settings. Safe to call any time settings change. */
 async function reschedule() {
   if (currentTask) {
@@ -71,4 +104,4 @@ async function reschedule() {
   console.log(`[automation] scheduler active: "${expr}" (${settings.schedule})`);
 }
 
-module.exports = { reschedule, fire, isRunning: () => running };
+module.exports = { reschedule, fire, isRunning: () => running, nextRunEstimate };

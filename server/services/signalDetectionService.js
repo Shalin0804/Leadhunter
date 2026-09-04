@@ -1,16 +1,19 @@
 /**
  * Detects business-opportunity signals from data this app has actually
- * collected — website audit results, registration/discovery recency, public
- * social links, industry. Every signal is directly observable; nothing here
- * infers hiring, expansion, new branches, or new products/services, because
- * this app has no data source for those (no job-postings API, no news feed).
- * If there's no real evidence for a signal, it is simply not created.
+ * collected — website audit results (including real feature-flag detection),
+ * registration/discovery recency, public social links, industry. Every
+ * signal is directly observable; nothing here infers hiring, expansion, new
+ * branches, or new products/services, because this app has no data source
+ * for those (no job-postings API, no news feed). If there's no real evidence
+ * for a signal, it is simply not created.
  */
 const { DetectedSignal, Company, CompanySocial } = require('../models');
 
 const RECENTLY_REGISTERED_DAYS = 180;
 const RECENTLY_DISCOVERED_DAYS = 3;
 const BOOKING_INDUSTRIES = ['hotel', 'restaurant', 'clinic', 'salon', 'spa', 'resort', 'cafe'];
+const ORDERING_INDUSTRIES = ['restaurant', 'cafe', 'food', 'catering'];
+const APPOINTMENT_INDUSTRIES = ['clinic', 'hospital', 'medical', 'health', 'diagnostic', 'dental', 'salon', 'spa', 'law firm', 'legal', 'advocate', 'attorney'];
 const ECOMMERCE_INDUSTRIES = ['retail', 'shop', 'store', 'boutique'];
 const ECOMMERCE_TECH = ['Shopify', 'Wix', 'Squarespace', 'Webflow'];
 
@@ -24,11 +27,20 @@ function daysAgo(date) {
  */
 function detectSignals({ company, websiteAudit }) {
   const found = [];
+  const flags = websiteAudit?.featureFlags || {};
 
   if (websiteAudit?.status === 'no_website') {
     found.push({
       type: 'NO_WEBSITE',
       description: 'No website found for this business',
+      strength: 'HIGH',
+      source: 'website_audit',
+      verified: true,
+    });
+  } else if (websiteAudit?.status === 'broken') {
+    found.push({
+      type: 'BROKEN_WEBSITE',
+      description: `Website returns an error (HTTP ${websiteAudit.httpStatus ?? 'unknown'}) instead of a working page`,
       strength: 'HIGH',
       source: 'website_audit',
       verified: true,
@@ -62,22 +74,50 @@ function detectSignals({ company, websiteAudit }) {
   }
 
   const industry = String(company.industry || '').toLowerCase();
+  const isLiveSite = websiteAudit?.status === 'live';
 
-  if (websiteAudit?.status === 'live' && BOOKING_INDUSTRIES.some((k) => industry.includes(k))) {
-    const hasBookingTech = (websiteAudit.technologies || []).some((t) => /booking|reserv|calendly|sirvoy/i.test(t));
-    if (!hasBookingTech) {
-      found.push({
-        type: 'ONLINE_BOOKING_GAP',
-        description: 'Has a website but no online booking/reservation tooling detected',
-        strength: 'MEDIUM',
-        source: 'website_audit',
-        verified: true,
-      });
-    }
+  if (isLiveSite && !flags.hasContactPage && !flags.emailOnPage && !flags.phoneOnPage) {
+    found.push({
+      type: 'CONTACT_GAP',
+      description: 'Has a website, but no contact page, email, or phone number could be found on it',
+      strength: 'MEDIUM',
+      source: 'website_audit',
+      verified: true,
+    });
+  }
+
+  if (isLiveSite && BOOKING_INDUSTRIES.some((k) => industry.includes(k)) && !flags.hasBookingFeature) {
+    found.push({
+      type: 'ONLINE_BOOKING_GAP',
+      description: 'Has a website but no online booking/reservation tooling detected',
+      strength: 'MEDIUM',
+      source: 'website_audit',
+      verified: true,
+    });
+  }
+
+  if (isLiveSite && ORDERING_INDUSTRIES.some((k) => industry.includes(k)) && !flags.hasOnlineOrdering) {
+    found.push({
+      type: 'ONLINE_ORDERING_GAP',
+      description: 'Food/beverage business website has no online ordering detected',
+      strength: 'MEDIUM',
+      source: 'website_audit',
+      verified: true,
+    });
+  }
+
+  if (isLiveSite && APPOINTMENT_INDUSTRIES.some((k) => industry.includes(k)) && !flags.hasAppointmentFeature) {
+    found.push({
+      type: 'APPOINTMENT_GAP',
+      description: 'Appointment-based business website has no online appointment/scheduling tooling detected',
+      strength: 'MEDIUM',
+      source: 'website_audit',
+      verified: true,
+    });
   }
 
   if (ECOMMERCE_INDUSTRIES.some((k) => industry.includes(k))) {
-    const hasEcommerceTech = (websiteAudit?.technologies || []).some((t) => ECOMMERCE_TECH.includes(t));
+    const hasEcommerceTech = flags.hasEcommerce || (websiteAudit?.technologies || []).some((t) => ECOMMERCE_TECH.includes(t));
     if (!hasEcommerceTech) {
       found.push({
         type: 'ECOMMERCE_OPPORTUNITY',
@@ -105,12 +145,15 @@ async function detectAndSaveSignals(companyId, { transaction } = {}) {
     transaction,
   });
   const websiteAudit = websiteRow
-    ? { status: websiteRow.status, health: websiteRow.health, technologies: websiteRow.detected_technologies, signals: websiteRow.audit_signals }
+    ? {
+        status: websiteRow.status,
+        health: websiteRow.health,
+        httpStatus: websiteRow.http_status,
+        technologies: websiteRow.detected_technologies,
+        signals: websiteRow.audit_signals,
+        featureFlags: websiteRow.feature_flags || {},
+      }
     : null;
-
-  if (company.socials?.length > 0) {
-    // handled separately below to avoid re-deriving inside detectSignals (needs no other data)
-  }
 
   const detected = detectSignals({ company, websiteAudit });
 

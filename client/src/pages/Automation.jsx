@@ -175,6 +175,32 @@ export default function Automation() {
           </div>
 
           <div className="field">
+            <label>Discovery sources</label>
+            <div className="chip-row">
+              {(data.discoveryProviders || []).map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`chip ${form.discoveryProviders?.includes(p.key) ? 'active' : ''}`}
+                  disabled={!p.configured}
+                  title={p.configured ? '' : `${p.label} is not configured (missing API key) — set it in Render env vars to enable`}
+                  onClick={() =>
+                    set(
+                      'discoveryProviders',
+                      form.discoveryProviders?.includes(p.key)
+                        ? form.discoveryProviders.filter((x) => x !== p.key)
+                        : [...(form.discoveryProviders || []), p.key]
+                    )
+                  }
+                >
+                  {p.label}
+                  {!p.configured && ' (not configured)'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field">
             <label>Target opportunities</label>
             <div className="chip-row">
               {Object.entries(OPPORTUNITY_LABELS).map(([k, v]) => (
@@ -188,6 +214,22 @@ export default function Automation() {
           <div className="field">
             <label>Minimum lead score to save</label>
             <input className="input" type="number" min="0" max="100" value={form.minLeadScore} onChange={(e) => set('minLeadScore', Number(e.target.value))} />
+          </div>
+
+          <div className="form-row">
+            <div className="field">
+              <label>Enrichment score threshold</label>
+              <input className="input" type="number" min="0" max="100" value={form.enrichmentThreshold} onChange={(e) => set('enrichmentThreshold', Number(e.target.value))} />
+              <div className="help-text">A near-threshold score with a website, a strong industry/location fit, or a high buying signal can still qualify — see README.</div>
+            </div>
+            <div className="field">
+              <label>Enrichment refresh (days)</label>
+              <input className="input" type="number" min="1" value={form.enrichmentRefreshDays} onChange={(e) => set('enrichmentRefreshDays', Number(e.target.value))} />
+            </div>
+            <div className="field">
+              <label>Max enrichments per run</label>
+              <input className="input" type="number" min="1" value={form.maxEnrichmentsPerRun} onChange={(e) => set('maxEnrichmentsPerRun', Number(e.target.value))} />
+            </div>
           </div>
 
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>

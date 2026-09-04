@@ -86,13 +86,16 @@ async function run() {
   assert(typeof r.json.data.analysis.contactabilityScore === 'number', 'analysis includes contactabilityScore (0-10)');
   assert(Array.isArray(r.json.data.analysis.breakdown) && r.json.data.analysis.breakdown.length === 6, 'scoring breakdown has 6 categories');
   assert(r.json.data.analysis.modelVersion === 'rule-based-v2', 'scoring is explicitly labeled rule-based, not AI');
+  assert(['HOT', 'WARM', 'MEDIUM', 'LOW'].includes(r.json.data.analysis.temperature), 'temperature is one of the 4 Prospecting Engine 2.0 bands');
 
-  // --- Contact enrichment (honest failure when HUNTER_API_KEY is absent) ---
+  // --- Contact enrichment (honest, explicit status when HUNTER_API_KEY is absent — never a crash, never a fake success) ---
   r = await call('POST', `/companies/${newCompanyId}/enrich`);
-  if (r.status === 400) {
-    assert(/hunter/i.test(r.json.message) || /api key/i.test(r.json.message), 'enrichment fails with a clear "missing API key" message when unconfigured');
+  if (r.status === 200 && r.json.data.enrichment.reason === 'HUNTER_NOT_CONFIGURED') {
+    assert(true, 'enrichment returns HUNTER_NOT_CONFIGURED (no crash, no fabricated contact) when unconfigured');
+  } else if (r.status === 200) {
+    assert(['success', 'skipped'].includes(r.json.data.enrichment.status), 'POST /companies/:id/enrich (Hunter configured)');
   } else {
-    assert(r.status === 200, 'POST /companies/:id/enrich (Hunter configured)');
+    assert(false, `unexpected enrich response ${r.status}: ${JSON.stringify(r.json)}`);
   }
 
   r = await call('POST', '/leads', { company_id: newCompanyId, priority: 'HIGH' });
@@ -147,6 +150,8 @@ async function run() {
   // --- Automation ---
   r = await call('GET', '/automation/settings');
   assert(r.status === 200 && Array.isArray(r.json.data.settings.locations), 'GET /automation/settings');
+  assert(Array.isArray(r.json.data.settings.discoveryProviders) && r.json.data.settings.discoveryProviders.includes('osm'), 'automation settings include multi-provider discoveryProviders (osm by default)');
+  assert(r.json.data.discoveryProviders.some((p) => p.key === 'yelp'), 'Yelp is registered as a discovery provider (configured: false without YELP_API_KEY)');
 
   r = await call('PUT', '/automation/settings', { locations: ['Smoke City'], industries: ['Smoke Industry'], dailyLeadLimit: 5 });
   assert(r.status === 200 && r.json.data.settings.dailyLeadLimit === 5, 'PUT /automation/settings persists');

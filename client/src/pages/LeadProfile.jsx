@@ -50,7 +50,14 @@ export default function LeadProfile() {
   const enrichNow = async () => {
     try {
       const res = await companyApi.enrichContact(lead.company_id);
-      toast.success(res.enrichment?.status === 'success' ? 'Contact enrichment complete' : `Enrichment ${res.enrichment?.status}: ${res.enrichment?.reason || ''}`);
+      const reason = res.enrichment?.reason;
+      const message =
+        res.enrichment?.status === 'success'
+          ? 'Contact enrichment complete'
+          : reason === 'HUNTER_NOT_CONFIGURED'
+            ? 'Enrichment not run: Hunter.io is not configured on the server (HUNTER_API_KEY missing)'
+            : `Enrichment ${res.enrichment?.status}: ${reason || ''}`;
+      toast.success(message);
       reload();
     } catch (e) {
       toast.error(e.message);

@@ -46,3 +46,12 @@ services:
       # Optional — enables real contact enrichment (Hunter.io). Leave unset to disable.
       - key: HUNTER_API_KEY
         sync: false
+      # Optional — additional business-discovery source. Leave unset; OSM keeps running on its own.
+      - key: YELP_API_KEY
+        sync: false
+      # Score (0-100) at/above which a lead becomes eligible for contact enrichment.
+      - key: ENRICHMENT_MIN_SCORE
+        value: "50"
+      # Days before a company already enriched can be re-enriched.
+      - key: ENRICHMENT_REFRESH_DAYS
+        value: "30"

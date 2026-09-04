@@ -7,5 +7,6 @@ router.get('/opportunities', asyncHandler(ctrl.opportunities));
 router.get('/activity', asyncHandler(ctrl.activityFeed));
 router.get('/todays-work', asyncHandler(ctrl.todaysWork));
 router.get('/daily-summary', asyncHandler(ctrl.dailySummary));
+router.get('/automation-status', asyncHandler(ctrl.automationStatus));
 
 module.exports = router;

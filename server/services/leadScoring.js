@@ -15,7 +15,7 @@ function temperatureForScore(score) {
   for (const band of config.temperatureBands) {
     if (score >= band.min) return band.temperature;
   }
-  return 'NOT_QUALIFIED';
+  return 'LOW';
 }
 
 function opportunityLevelForScore(score) {
@@ -49,6 +49,7 @@ function extractSignals(company) {
   const hasWebsite = !noWebsiteConfirmed && !!(primaryWebsite || plain.website || plain.has_website);
   const websiteStatus = primaryWebsite?.status || (hasWebsite ? 'unknown' : 'no_website');
   const websiteHealth = primaryWebsite?.health || 'unknown';
+  const websiteFeatureFlags = primaryWebsite?.feature_flags || null;
 
   const emailContacts = contacts.filter((c) => c.type === 'email');
   const phoneContacts = contacts.filter((c) => c.type === 'phone');
@@ -67,6 +68,8 @@ function extractSignals(company) {
     hasWebsite,
     websiteStatus,
     websiteHealth,
+    websiteFeatureFlags,
+    linkedinUrl: plain.linkedin_url || null,
     hasEmail,
     hasPublicBusinessEmail,
     hasPhone,
@@ -79,10 +82,16 @@ function extractSignals(company) {
   };
 }
 
-/** Website Opportunity: 0-20, from the live audit's health rating. */
+/** Website Opportunity: 0-20, from the live audit's status/health rating. */
 function scoreWebsiteOpportunity(s) {
-  const points = config.websiteOpportunityByHealth[s.websiteStatus === 'no_website' ? 'no_website' : s.websiteHealth] ?? config.websiteOpportunityByHealth.unknown;
-  const label = s.websiteStatus === 'no_website' ? 'No website found' : `Website health: ${s.websiteHealth}`;
+  const STATUS_LABELS = {
+    no_website: 'No website found',
+    broken: 'Website is broken (server returns an error)',
+    inaccessible: 'Website is inaccessible (DNS/timeout failure)',
+  };
+  const key = STATUS_LABELS[s.websiteStatus] ? s.websiteStatus : s.websiteHealth;
+  const label = STATUS_LABELS[s.websiteStatus] || `Website health: ${s.websiteHealth}`;
+  const points = config.websiteOpportunityByHealth[key] ?? config.websiteOpportunityByHealth.unknown;
   return { score: points, max: config.categoryMax.websiteOpportunity, reasons: points > 0 ? [label] : [] };
 }
 
@@ -133,7 +142,14 @@ function scoreBuyingSignal(s) {
 
 /** Contactability: 0-10, delegated to contactabilityService. */
 function scoreContactability(s) {
-  const result = computeContactability({ contacts: s.contacts, hasWebsite: s.hasWebsite, hasSocial: s.hasSocial });
+  const result = computeContactability({
+    contacts: s.contacts,
+    hasWebsite: s.hasWebsite,
+    hasSocial: s.hasSocial,
+    linkedinUrl: s.linkedinUrl,
+    hasContactPage: !!s.websiteFeatureFlags?.hasContactPage,
+    hasContactForm: !!s.websiteFeatureFlags?.hasContactForm,
+  });
   return { score: result.score, max: config.categoryMax.contactability, reasons: result.reasons, raw: result };
 }
 

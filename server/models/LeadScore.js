@@ -10,9 +10,9 @@ module.exports = (sequelize) => {
 
       score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       temperature: {
-        type: DataTypes.ENUM('HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'),
+        type: DataTypes.ENUM('HOT', 'WARM', 'MEDIUM', 'LOW'),
         allowNull: false,
-        defaultValue: 'NOT_QUALIFIED',
+        defaultValue: 'LOW',
       },
       opportunity_level: { type: DataTypes.STRING(30), allowNull: true },
       recommended_service: { type: DataTypes.STRING(160), allowNull: true },

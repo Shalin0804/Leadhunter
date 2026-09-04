@@ -22,7 +22,9 @@ module.exports = (sequelize) => {
       confidence: { type: DataTypes.INTEGER, allowNull: true }, // 0-100, as reported by the provider
       source: { type: DataTypes.STRING(40), allowNull: true }, // 'hunter' | 'osm' | 'apollo' | 'csv' | 'manual' | ...
       contact_name: { type: DataTypes.STRING(160), allowNull: true }, // publicly listed name, if any
-      job_title: { type: DataTypes.STRING(160), allowNull: true },
+      job_title: { type: DataTypes.STRING(160), allowNull: true }, // a.k.a. contact_role
+      linkedin_url: { type: DataTypes.STRING(255), allowNull: true }, // public profile, if the enrichment provider returned one
+      enriched_at: { type: DataTypes.DATE, allowNull: true }, // when this specific contact row was last touched by enrichment
 
       // Phone-specific.
       country_code: { type: DataTypes.STRING(8), allowNull: true },

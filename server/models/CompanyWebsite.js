@@ -7,8 +7,11 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
       company_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
       url: { type: DataTypes.STRING(255), allowNull: false },
+      // 'down' is a legacy catch-all kept for old rows; new audits report the more
+      // specific 'broken' (site resolves, server returned an error status) or
+      // 'inaccessible' (DNS/timeout/connection failure — no response at all).
       status: {
-        type: DataTypes.ENUM('unknown', 'live', 'down', 'parked', 'no_website'),
+        type: DataTypes.ENUM('unknown', 'live', 'down', 'broken', 'inaccessible', 'parked', 'no_website'),
         allowNull: false,
         defaultValue: 'unknown',
       },
@@ -28,6 +31,10 @@ module.exports = (sequelize) => {
       meta_description: { type: DataTypes.STRING(500), allowNull: true },
       detected_technologies: { type: DataTypes.JSON, allowNull: true },
       audit_signals: { type: DataTypes.JSON, allowNull: true },
+      // Feature detection from the single homepage fetch (no crawling): contact page
+      // link, booking/ordering/appointment tooling, e-commerce, contact form, an email
+      // or phone printed on the page, and whether the site is effectively social-only.
+      feature_flags: { type: DataTypes.JSON, allowNull: true },
 
       last_checked_at: { type: DataTypes.DATE, allowNull: true },
       notes: { type: DataTypes.STRING(255), allowNull: true },

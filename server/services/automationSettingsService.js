@@ -1,4 +1,5 @@
 const { Setting } = require('../models');
+const config = require('../config/config');
 
 const KEY = 'automation_config';
 
@@ -15,11 +16,15 @@ const DEFAULTS = {
   autoEnrichContacts: true,
   autoDetectBuyingSignals: true,
   autoSaveQualifiedLeads: true,
-  provider: 'osm', // osm | google_places
+  provider: 'osm', // osm | google_places — legacy single-provider field, kept for back-compat
+  discoveryProviders: ['osm'], // osm | google_places | yelp — a target is run against every listed provider whose isConfigured() is true
 
-  // Contact enrichment (Hunter) — only runs for companies whose score already
-  // cleared this bar, and only up to this many times per run (cost control).
-  enrichmentThreshold: 60,
+  // Contact enrichment (Hunter) — gated by isEligibleForEnrichment(), not just a raw
+  // score threshold (see enrichmentService). ENRICHMENT_MIN_SCORE/ENRICHMENT_REFRESH_DAYS
+  // set the server-wide defaults; these can still be overridden per-install here.
+  enrichmentThreshold: config.enrichment.minScore,
+  enrichmentMinScore: config.enrichment.minScore, // alias of enrichmentThreshold, kept for clarity with the env var name
+  enrichmentRefreshDays: config.enrichment.refreshDays,
   maxEnrichmentsPerRun: 20,
   enrichmentProvider: 'hunter',
 };

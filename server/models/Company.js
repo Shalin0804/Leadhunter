@@ -33,6 +33,7 @@ module.exports = (sequelize) => {
       normalized_domain: { type: DataTypes.STRING(255), allowNull: true },
       normalized_phone: { type: DataTypes.STRING(30), allowNull: true },
       normalized_name: { type: DataTypes.STRING(255), allowNull: true },
+      normalized_address: { type: DataTypes.STRING(500), allowNull: true },
 
       // Automated-discovery tracking — lets repeated searches recognize "seen this before".
       times_discovered: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
@@ -57,10 +58,11 @@ module.exports = (sequelize) => {
 
       // Cached latest scoring for fast discovery listing / filtering
       lead_score: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      // 4-tier priority (Prospecting Engine 2.0): 80-100 HOT, 60-79 WARM, 50-59 MEDIUM, 0-49 LOW.
       lead_temperature: {
-        type: DataTypes.ENUM('HOT', 'HIGH', 'WARM', 'LOW', 'NOT_QUALIFIED'),
+        type: DataTypes.ENUM('HOT', 'WARM', 'MEDIUM', 'LOW'),
         allowNull: false,
-        defaultValue: 'NOT_QUALIFIED',
+        defaultValue: 'LOW',
       },
       recommended_service: { type: DataTypes.STRING(160), allowNull: true },
     },
