@@ -167,7 +167,7 @@ export default function Automation() {
 
           <div className="field">
             <label>Target locations</label>
-            <TagInput values={form.locations} onChange={(v) => set('locations', v)} placeholder="e.g. Ahmedabad, India" />
+            <TagInput values={form.locations} onChange={(v) => set('locations', v)} placeholder="e.g. Austin, USA or London, UK" />
           </div>
           <div className="field">
             <label>Target industries</label>

@@ -98,25 +98,30 @@ module.exports = {
     'Manufactur',
     'Startup',
   ],
-  // Matched against both company.state and company.city.
+  // Matched against both company.state and company.city. This list is intentionally broad
+  // and worldwide — it exists only to give a small scoring nudge to markets a Codefloor
+  // install actually serves, NOT to gate discovery or scoring by geography. A location
+  // missing from this list still gets discovered, saved, and scored on every other
+  // category; it just misses the +7 "Codefloor Fit" location bonus. Edit freely per market —
+  // this is data, not logic (see README §11 "Lead scoring").
   targetLocations: [
-    'Maharashtra',
-    'Karnataka',
-    'Delhi',
-    'Telangana',
-    'Tamil Nadu',
-    'Gujarat',
-    'Haryana',
-    'Ahmedabad',
-    'Mumbai',
-    'Bengaluru',
-    'Bangalore',
-    'Dubai',
-    'UAE',
-    'London',
-    'United Kingdom',
-    'USA',
-    'United States',
+    // India (existing home market)
+    'Maharashtra', 'Karnataka', 'Delhi', 'Telangana', 'Tamil Nadu', 'Gujarat', 'Haryana',
+    'Ahmedabad', 'Mumbai', 'Bengaluru', 'Bangalore', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata',
+    'India',
+    // Middle East
+    'Dubai', 'Abu Dhabi', 'UAE', 'United Arab Emirates', 'Saudi Arabia', 'Riyadh', 'Qatar', 'Doha',
+    // Europe
+    'London', 'United Kingdom', 'UK', 'Manchester', 'Ireland', 'Dublin', 'Germany', 'Berlin',
+    'France', 'Paris', 'Netherlands', 'Amsterdam', 'Spain', 'Madrid', 'Italy', 'Milan',
+    // North America
+    'USA', 'United States', 'New York', 'California', 'San Francisco', 'Los Angeles', 'Texas',
+    'Austin', 'Chicago', 'Canada', 'Toronto', 'Vancouver',
+    // Asia-Pacific
+    'Singapore', 'Australia', 'Sydney', 'Melbourne', 'New Zealand', 'Auckland', 'Malaysia',
+    'Philippines', 'Japan', 'Tokyo',
+    // Africa
+    'South Africa', 'Nigeria', 'Kenya',
   ],
 
   // Map a Signal.service enum onto the recommended-service label shown in the CRM.

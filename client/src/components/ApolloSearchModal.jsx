@@ -116,7 +116,7 @@ export default function ApolloSearchModal({ open, onClose, onImported }) {
             </div>
             <div className="field">
               <label>Location(s)</label>
-              <input className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="e.g. Mumbai, India" />
+              <input className="input" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="e.g. San Francisco, USA" />
             </div>
           </div>
           <div className="field">

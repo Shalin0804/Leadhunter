@@ -2,14 +2,14 @@ export const fmtDate = (d) => {
   if (!d) return '—';
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 export const fmtDateTime = (d) => {
   if (!d) return '—';
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  return date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 };
 
 export const fmtRelative = (d) => {
@@ -38,10 +38,10 @@ export const fmtMoney = (n) => {
   if (n === null || n === undefined || n === '') return '—';
   const num = Number(n);
   if (Number.isNaN(num)) return '—';
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
 };
 
-export const fmtNumber = (n) => new Intl.NumberFormat('en-IN').format(Number(n) || 0);
+export const fmtNumber = (n) => new Intl.NumberFormat('en-US').format(Number(n) || 0);
 
 export const initials = (name = '') =>
   name

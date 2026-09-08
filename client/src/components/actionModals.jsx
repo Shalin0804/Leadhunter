@@ -74,7 +74,7 @@ export function ConvertToLeadModal({ open, onClose, company, onDone }) {
           </select>
         </div>
         <div className="field">
-          <label>Estimated value (₹)</label>
+          <label>Estimated value ($)</label>
           <input className="input" type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. 75000" />
         </div>
       </div>
