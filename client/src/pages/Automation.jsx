@@ -311,9 +311,13 @@ export default function Automation() {
                       <td>{(r.industries || []).join(', ')}</td>
                       <td><span className="badge gray">{r.provider}</span></td>
                       <td>
-                        <span className={`badge ${r.status === 'completed' ? 'green' : r.status === 'failed' ? 'hot' : 'blue'}`}>
-                          {r.status}
-                        </span>
+                        {r.summary?.message?.toLowerCase().includes('skip') ? (
+                          <span className="badge gray" title={r.summary.message}>skipped</span>
+                        ) : (
+                          <span className={`badge ${r.status === 'completed' ? 'green' : r.status === 'failed' ? 'hot' : 'blue'}`} title={r.summary?.message || ''}>
+                            {r.status}
+                          </span>
+                        )}
                       </td>
                       <td>{r.businesses_discovered}</td>
                       <td>{r.duplicates_skipped}</td>
