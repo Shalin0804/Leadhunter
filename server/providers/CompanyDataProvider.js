@@ -107,6 +107,8 @@ class CompanyDataProvider {
           errors.push({ field: 'date_of_incorporation', message: 'Date is in the future' });
         }
       }
+    } else {
+      value.date_of_incorporation = null;
     }
 
     for (const capField of ['authorized_capital', 'paid_up_capital']) {
