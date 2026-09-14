@@ -20,6 +20,16 @@ const SIGNAL_TYPES = [
   'ONLINE_ORDERING_GAP',
   'APPOINTMENT_GAP',
   'CONTACT_GAP',
+  // Hermes Agent research additions — real web-research findings this app's own
+  // rule-based detector has no data source for (no job-postings API, no news
+  // feed). Appended, never renamed, per the convention above.
+  'HIRING',
+  'EXPANSION',
+  'NEW_LOCATION',
+  'NEW_PRODUCT',
+  'RECENT_ACTIVITY',
+  'POOR_ONLINE_PRESENCE',
+  'INACTIVE_SOCIAL_PRESENCE',
 ];
 
 const SIGNAL_STRENGTHS = ['NONE', 'LOW', 'MEDIUM', 'HIGH'];

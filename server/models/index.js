@@ -20,6 +20,8 @@ const SearchRun = require('./SearchRun')(sequelize);
 const ApiUsage = require('./ApiUsage')(sequelize);
 const Outreach = require('./Outreach')(sequelize);
 const DetectedSignal = require('./DetectedSignal')(sequelize);
+const HermesResearchRun = require('./HermesResearchRun')(sequelize);
+const HermesResearchEvidence = require('./HermesResearchEvidence')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -100,6 +102,15 @@ Outreach.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id' });
 Company.hasMany(DetectedSignal, { as: 'detectedSignals', foreignKey: 'company_id', onDelete: 'CASCADE' });
 DetectedSignal.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
 
+// Hermes Agent research runs + evidence
+Company.hasMany(HermesResearchRun, { as: 'hermesResearchRuns', foreignKey: 'company_id', onDelete: 'CASCADE' });
+HermesResearchRun.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
+HermesResearchRun.belongsTo(User, { as: 'triggeredByUser', foreignKey: 'triggered_by_user_id' });
+HermesResearchRun.hasMany(HermesResearchEvidence, { as: 'evidence', foreignKey: 'research_run_id', onDelete: 'CASCADE' });
+HermesResearchEvidence.belongsTo(HermesResearchRun, { as: 'researchRun', foreignKey: 'research_run_id' });
+Company.hasMany(HermesResearchEvidence, { as: 'hermesEvidence', foreignKey: 'company_id', onDelete: 'CASCADE' });
+HermesResearchEvidence.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
+
 // Imports
 User.hasMany(CompanyImport, { as: 'imports', foreignKey: 'user_id' });
 CompanyImport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -129,6 +140,8 @@ const db = {
   ApiUsage,
   Outreach,
   DetectedSignal,
+  HermesResearchRun,
+  HermesResearchEvidence,
 };
 
 module.exports = db;

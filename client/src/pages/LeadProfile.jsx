@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap } from 'react-icons/fi';
+import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap, FiSearch } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
-import { leadApi, companyApi } from '../services/endpoints';
+import { leadApi, companyApi, hermesApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
@@ -33,6 +33,66 @@ export default function LeadProfile() {
   const toast = useToast();
   const [modal, setModal] = useState(null);
   const { data, loading, error, reload } = useApi(() => leadApi.get(id), [id]);
+  const companyId = data?.lead?.company_id;
+
+  const [hermesRun, setHermesRun] = useState(null);
+  const [hermesEvidence, setHermesEvidence] = useState(null);
+  const [showHermesEvidence, setShowHermesEvidence] = useState(false);
+  const prevHermesStatus = useRef(null);
+
+  const loadHermesRun = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      const res = await hermesApi.getResearch(companyId);
+      const prev = prevHermesStatus.current;
+      prevHermesStatus.current = res.run?.status || null;
+      setHermesRun(res.run);
+      if (res.run?.status === 'COMPLETED' && prev && prev !== 'COMPLETED') {
+        toast.success('Hermes research complete');
+        reload();
+      } else if (res.run?.status === 'FAILED' && prev && prev !== 'FAILED') {
+        toast.error(`Hermes research failed: ${res.run.error || 'unknown error'}`);
+      }
+    } catch {
+      // Non-fatal — the rest of the lead page still works without Hermes status.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
+  useEffect(() => {
+    loadHermesRun();
+  }, [loadHermesRun]);
+
+  useEffect(() => {
+    if (!hermesRun || !['PENDING', 'RUNNING', 'RETRY'].includes(hermesRun.status)) return undefined;
+    const t = setInterval(loadHermesRun, 5000);
+    return () => clearInterval(t);
+  }, [hermesRun, loadHermesRun]);
+
+  const runHermesResearch = async () => {
+    try {
+      await hermesApi.research(companyId);
+      toast.success('Hermes research started — this can take a couple of minutes.');
+      setShowHermesEvidence(false);
+      loadHermesRun();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
+
+  const toggleHermesEvidence = async () => {
+    if (showHermesEvidence) {
+      setShowHermesEvidence(false);
+      return;
+    }
+    try {
+      const res = await hermesApi.getEvidence(companyId);
+      setHermesEvidence(res.evidence || []);
+      setShowHermesEvidence(true);
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
 
   if (loading) return <Loader label="Loading lead…" />;
   if (error)
@@ -275,6 +335,74 @@ export default function LeadProfile() {
               )}
             </Card>
           )}
+
+          <Card
+            title="Hermes Research"
+            actions={
+              <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                {(!hermesRun || ['COMPLETED', 'FAILED'].includes(hermesRun.status)) && (
+                  <button className="btn btn-sm" onClick={runHermesResearch}>
+                    <FiSearch /> {hermesRun ? 'Research Again' : 'Research with Hermes'}
+                  </button>
+                )}
+                {hermesRun?.status === 'COMPLETED' && (
+                  <button className="btn btn-sm btn-ghost" onClick={toggleHermesEvidence}>
+                    <FiFileText /> {showHermesEvidence ? 'Hide evidence' : 'View evidence'}
+                  </button>
+                )}
+              </div>
+            }
+          >
+            {!hermesRun && <p className="text-muted text-sm">No Hermes research yet for this company.</p>}
+            {hermesRun && (
+              <>
+                <dl className="def-list">
+                  <Row label="Status">
+                    <span className={`badge ${hermesRun.status === 'COMPLETED' ? 'green' : hermesRun.status === 'FAILED' ? 'not_qualified' : 'blue'}`}>
+                      {titleCase(hermesRun.status)}
+                    </span>
+                  </Row>
+                  <Row label="Started">{fmtDateTime(hermesRun.started_at)}</Row>
+                  <Row label="Completed">{fmtDateTime(hermesRun.completed_at)}</Row>
+                  <Row label="Sources checked">{hermesRun.sources_checked}</Row>
+                  <Row label="Fields found">{hermesRun.fields_found}</Row>
+                  <Row label="Confidence">{hermesRun.confidence != null ? `${hermesRun.confidence}%` : '—'}</Row>
+                  {hermesRun.error && <Row label="Error">{hermesRun.error}</Row>}
+                </dl>
+                {hermesRun.research_summary && (
+                  <>
+                    <div className="section-title mt-4">Summary</div>
+                    <p className="text-sm mt-2">{hermesRun.research_summary}</p>
+                  </>
+                )}
+                {showHermesEvidence && hermesEvidence && (
+                  <>
+                    <div className="section-title mt-4">Evidence & sources</div>
+                    {hermesEvidence.length ? (
+                      <ul className="reason-list">
+                        {hermesEvidence.map((e) => (
+                          <li key={e.id}>
+                            <strong>{e.field_name}</strong> — {e.status}
+                            {e.confidence != null && ` (${e.confidence}%)`}
+                            {e.source_url && (
+                              <>
+                                {' · '}
+                                <a href={e.source_url} target="_blank" rel="noreferrer">
+                                  source <FiExternalLink style={{ verticalAlign: '-2px' }} />
+                                </a>
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted text-sm">No evidence recorded for this run.</p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </Card>
 
           <Card title="Activity timeline">
             {activities.length ? (

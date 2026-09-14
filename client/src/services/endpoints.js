@@ -114,6 +114,13 @@ export const apolloApi = {
   enrich: (companyId) => unwrap(api.post(`/apollo/companies/${companyId}/enrich`)),
 };
 
+export const hermesApi = {
+  status: () => unwrap(api.get('/hermes/status')),
+  research: (companyId, body) => unwrap(api.post(`/hermes/research/${companyId}`, body || {})),
+  getResearch: (companyId) => unwrap(api.get(`/hermes/research/${companyId}`)),
+  getEvidence: (companyId) => unwrap(api.get(`/hermes/research/${companyId}/evidence`)),
+};
+
 export const signalApi = {
   list: (params) => unwrap(api.get(`/signals${qs(params)}`)),
   meta: () => unwrap(api.get('/signals/meta')),

@@ -66,4 +66,18 @@ module.exports = {
     // Shared secret an external cron service must send to trigger a scheduled run.
     triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),
   },
+
+  hermes: {
+    // Base URL of your locally-running (or hosted) Hermes Agent gateway, e.g.
+    // http://127.0.0.1:PORT — see server/.env.example for how to get a fixed
+    // port + key out of Hermes's own cli-config.yaml. Leave blank to disable.
+    baseUrl: env('HERMES_BASE_URL', ''),
+    apiKey: env('HERMES_API_KEY', ''),
+    timeoutMs: parseInt(env('HERMES_TIMEOUT_MS', '180000'), 10),
+    maxConcurrent: parseInt(env('HERMES_MAX_CONCURRENT', '2'), 10),
+    maxRetries: parseInt(env('HERMES_MAX_RETRIES', '2'), 10),
+    // When true, hermesClient returns a canned fixture instead of calling the
+    // network — lets the whole pipeline be exercised with no live agent run.
+    testMode: env('HERMES_TEST_MODE', 'false') === 'true',
+  },
 };

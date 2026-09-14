@@ -98,6 +98,46 @@ async function run() {
     assert(false, `unexpected enrich response ${r.status}: ${JSON.stringify(r.json)}`);
   }
 
+  // --- Hermes Agent research (graceful when unconfigured; full flow when HERMES_TEST_MODE=true) ---
+  r = await call('GET', '/hermes/status');
+  assert(r.status === 200 && typeof r.json.data.configured === 'boolean', 'GET /hermes/status');
+
+  if (!r.json.data.configured) {
+    r = await call('POST', `/hermes/research/${newCompanyId}`);
+    assert(r.status === 404 || r.status === 200, 'POST /hermes/research/:companyId does not crash when unconfigured');
+  } else {
+    r = await call('POST', `/hermes/research/${newCompanyId}`);
+    assert(r.status === 202, 'POST /hermes/research/:companyId starts a run');
+
+    // In HERMES_TEST_MODE the fixture resolves almost instantly; against a real
+    // gateway this may still be PENDING/RUNNING after a short poll, which the
+    // assertion below already tolerates.
+    let run = null;
+    for (let i = 0; i < 10; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      r = await call('GET', `/hermes/research/${newCompanyId}`);
+      run = r.json.data.run;
+      if (run && ['COMPLETED', 'FAILED'].includes(run.status)) break;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    assert(run && ['COMPLETED', 'FAILED', 'RUNNING', 'PENDING', 'RETRY'].includes(run.status), 'GET /hermes/research/:companyId returns a run');
+
+    if (run?.status === 'COMPLETED') {
+      assert(run.fields_found >= 0 && run.sources_checked >= 0, 'completed run reports fields_found/sources_checked');
+      r = await call('GET', `/hermes/research/${newCompanyId}/evidence`);
+      assert(r.status === 200 && Array.isArray(r.json.data.evidence), 'GET /hermes/research/:companyId/evidence');
+      assert(
+        r.json.data.evidence.every((e) => ['verified', 'likely', 'inferred', 'unavailable'].includes(e.status)),
+        'every evidence row is classified verified/likely/inferred/unavailable'
+      );
+      assert(
+        r.json.data.evidence.filter((e) => e.status === 'verified' || e.status === 'likely').every((e) => !!e.source_url),
+        'every verified/likely evidence row carries a real source_url'
+      );
+    }
+  }
+
   r = await call('POST', '/leads', { company_id: newCompanyId, priority: 'HIGH' });
   assert(r.status === 201 && r.json.data.lead.status === 'NEW', 'POST /leads converts company');
   const leadId = r.json.data.lead.id;

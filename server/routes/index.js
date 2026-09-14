@@ -27,5 +27,6 @@ router.use('/apollo', require('./apollo.routes'));
 router.use('/automation', require('./automation.routes'));
 router.use('/outreach', require('./outreach.routes'));
 router.use('/dashboard', require('./dashboard.routes'));
+router.use('/hermes', require('./hermes.routes'));
 
 module.exports = router;

@@ -7,7 +7,13 @@
  * for those (no job-postings API, no news feed). If there's no real evidence
  * for a signal, it is simply not created.
  */
+const { Op } = require('sequelize');
 const { DetectedSignal, Company, CompanySocial } = require('../models');
+
+// Signal rows created by the Hermes Agent research pipeline (see
+// server/services/hermes/hermesResearchService.js) live in this same table but
+// are owned/replaced by that pipeline, not this one — see the scoped destroy below.
+const HERMES_SIGNAL_SOURCE = 'hermes_research';
 
 const RECENTLY_REGISTERED_DAYS = 180;
 const RECENTLY_DISCOVERED_DAYS = 3;
@@ -167,8 +173,13 @@ async function detectAndSaveSignals(companyId, { transaction } = {}) {
     });
   }
 
-  // Replace this company's detected signals with the fresh set (avoid unbounded duplicates on re-runs).
-  await DetectedSignal.destroy({ where: { company_id: companyId }, transaction });
+  // Replace this company's detected signals with the fresh set (avoid unbounded duplicates
+  // on re-runs) — but never touch Hermes-sourced rows, which are owned/replaced by the
+  // separate Hermes research pipeline (see HERMES_SIGNAL_SOURCE above).
+  await DetectedSignal.destroy({
+    where: { company_id: companyId, signal_source: { [Op.ne]: HERMES_SIGNAL_SOURCE } },
+    transaction,
+  });
   if (!detected.length) return [];
 
   const rows = await DetectedSignal.bulkCreate(
@@ -186,4 +197,4 @@ async function detectAndSaveSignals(companyId, { transaction } = {}) {
   return rows;
 }
 
-module.exports = { detectSignals, detectAndSaveSignals };
+module.exports = { detectSignals, detectAndSaveSignals, HERMES_SIGNAL_SOURCE };
