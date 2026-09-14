@@ -55,3 +55,18 @@ services:
       # Days before a company already enriched can be re-enriched.
       - key: ENRICHMENT_REFRESH_DAYS
         value: "30"
+      # Optional — Hermes Agent research/enrichment. Leave HERMES_BASE_URL unset to
+      # disable (default; no behavior change). NOTE: this must be a URL Render's
+      # servers can reach over the internet — a gateway on your own machine at
+      # 127.0.0.1 is NOT reachable from here; expose it via a tunnel (Cloudflare
+      # Tunnel/ngrok) or run Hermes on a reachable host first. See server/.env.example.
+      - key: HERMES_BASE_URL
+        sync: false
+      - key: HERMES_API_KEY
+        sync: false
+      - key: HERMES_TIMEOUT_MS
+        value: "180000"
+      - key: HERMES_MAX_CONCURRENT
+        value: "2"
+      - key: HERMES_MAX_RETRIES
+        value: "2"
