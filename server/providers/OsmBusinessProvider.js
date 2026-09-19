@@ -18,6 +18,7 @@ const OVERPASS_URLS = [
   'https://overpass-api.de/api/interpreter',
 ];
 const OVERPASS_TIMEOUT_MS = 20000;
+const NOMINATIM_TIMEOUT_MS = 15000;
 const USER_AGENT = 'LeadHunterCRM/1.0 (business discovery; contact: admin@leadhunter.local)';
 
 // industry keyword -> OSM tag filters (best-effort; OSM coverage varies by tag/region)
@@ -57,6 +58,18 @@ async function throttleNominatim() {
   lastNominatimCall = Date.now();
 }
 
+// Overpass's fair-use policy prohibits back-to-back automated querying with no
+// delay — a full settings sweep hits dozens of (location, industry) targets in
+// one run, and hammering Overpass with zero spacing between them is exactly
+// what gets a shared-host IP rate-limited/blocked, which then makes every
+// subsequent call fail too. Match Nominatim's spacing.
+let lastOverpassCall = 0;
+async function throttleOverpass() {
+  const wait = Math.max(0, 1100 - (Date.now() - lastOverpassCall));
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastOverpassCall = Date.now();
+}
+
 const geocodeCache = new Map();
 
 /** location string -> bounding box {south, north, west, east}. Cached + rate-limited per Nominatim policy. */
@@ -65,7 +78,17 @@ async function geocode(location) {
   await throttleNominatim();
 
   const url = `${NOMINATIM_URL}?q=${encodeURIComponent(location)}&format=json&limit=1`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NOMINATIM_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: controller.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Nominatim geocoding timed out after ${NOMINATIM_TIMEOUT_MS}ms`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`Nominatim geocoding failed (${res.status})`);
   const data = await res.json();
   if (!data.length) throw new Error(`Could not geocode location: ${location}`);
@@ -149,6 +172,8 @@ class OsmBusinessProvider {
 
     let lastError;
     for (const url of OVERPASS_URLS) {
+      // eslint-disable-next-line no-await-in-loop
+      await throttleOverpass();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
       try {
