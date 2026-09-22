@@ -48,6 +48,8 @@ export const leadApi = {
   updateContactStatus: (id, body) => unwrap(api.patch(`/leads/${id}/contact-status`, body)),
   updateLeadStatus: (id, body) => unwrap(api.patch(`/leads/${id}/lead-status`, body)),
   recontact: (id, body) => unwrap(api.post(`/leads/${id}/recontact`, body)),
+  analyzeAI: (id) => unwrap(api.post(`/leads/${id}/ai/analyze`)),
+  reanalyzeAI: (id) => unwrap(api.post(`/leads/${id}/ai/reanalyze`)),
   remove: (id) => unwrap(api.delete(`/leads/${id}`)),
   exportCsv: (params) => downloadFile(`/leads/export${qs(params)}`, 'leads.csv'),
 };
@@ -112,6 +114,10 @@ export const apolloApi = {
   search: (body) => unwrap(api.post('/apollo/search', body)),
   import: (items) => unwrap(api.post('/apollo/import', { items })),
   enrich: (companyId) => unwrap(api.post(`/apollo/companies/${companyId}/enrich`)),
+};
+
+export const aiApi = {
+  status: () => unwrap(api.get('/ai/status')),
 };
 
 export const hermesApi = {

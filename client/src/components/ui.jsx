@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { FiX, FiInbox, FiAlertTriangle, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { TEMP_LABELS, STATUS_LABELS } from '../utils/format';
+import { TEMP_LABELS, STATUS_LABELS, LEAD_SOURCE_LABELS } from '../utils/format';
 
 export const Loader = ({ label }) => (
   <div className="loading-center">
@@ -69,6 +69,14 @@ const STATUS_TONE = {
 
 export const StatusBadge = ({ value }) => (
   <span className={`badge ${STATUS_TONE[value] || 'gray'}`}>{STATUS_LABELS[value] || value}</span>
+);
+
+const SOURCE_TONE = { automation: 'blue', manual: 'gray', imported: 'warm' };
+
+// Lead.source is the database source-of-truth for automatic vs. manual vs.
+// imported classification — this badge only ever reflects that stored value.
+export const SourceBadge = ({ value }) => (
+  <span className={`badge ${SOURCE_TONE[value] || 'gray'}`}>{LEAD_SOURCE_LABELS[value] || value || 'Manual'}</span>
 );
 
 export const ScoreBadge = ({ value }) => {

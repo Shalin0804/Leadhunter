@@ -1,16 +1,18 @@
 /**
  * "AI qualification" step of the discovery pipeline.
  *
- * This is a deterministic, rule-based summarizer — not a hosted LLM call — so
- * it costs nothing and never fabricates facts about a business. It reuses the
- * same scoring/opportunity signals already computed for the lead and turns
- * them into a short, specific, human-readable qualification write-up that
- * names the actual company, its industry, and the real evidence found (never
- * a generic template with no company reference).
+ * `qualify()` below is a deterministic, rule-based summarizer — not a hosted
+ * LLM call — so it costs nothing and never fabricates facts about a business.
+ * It reuses the same scoring/opportunity signals already computed for the
+ * lead and turns them into a short, specific, human-readable qualification
+ * write-up that names the actual company, its industry, and the real
+ * evidence found (never a generic template with no company reference). It
+ * keeps running unconditionally, for every lead, regardless of whether
+ * Nemotron is configured.
  *
- * A real LLM can be dropped in later (e.g. behind ANTHROPIC_API_KEY) by
- * replacing `qualify()`'s body while keeping the same return shape — nothing
- * else in the pipeline needs to change.
+ * `qualifyWithNemotron()` (bottom of this file) is the real hosted-LLM
+ * qualification, via NVIDIA NIM's Nemotron model — an additional, optional
+ * intelligence layer on top of the above, not a replacement for it.
  */
 
 function industryNoun(industry) {
@@ -107,4 +109,191 @@ function qualify({ company, scoring, opportunities, websiteAudit }) {
   };
 }
 
-module.exports = { qualify, industryNoun };
+/**
+ * ---------------------------------------------------------------------------
+ * Nemotron (NVIDIA NIM) AI qualification — a second, LLM-backed intelligence
+ * layer that sits ALONGSIDE `qualify()` above, not instead of it. `qualify()`
+ * keeps running unconditionally (free, deterministic, never fails) and its
+ * output keeps populating Lead.ai_problem/ai_evidence/ai_sales_angle exactly
+ * as before; this section only adds the separate Lead.ai_* Nemotron fields
+ * (ai_qualification_status, ai_confidence, ai_summary, ai_recommended_service,
+ * ai_outreach_angle, ai_analysis, ai_processing_status, ...) and never touches
+ * lead_score / lead_temperature / recommended_service (the deterministic
+ * scoring engine in leadScoring.js remains the single source of truth there).
+ * ---------------------------------------------------------------------------
+ */
+const { Lead, Company, CompanyContact, CompanyWebsite, CompanySocial, DetectedSignal, Signal, Activity } = require('../models');
+const config = require('../config/config');
+const nvidiaClient = require('./ai/nvidiaClient');
+const { buildQualificationPrompt, ALLOWED_SERVICES } = require('./ai/aiQualificationPromptBuilder');
+const { parseQualificationOutput } = require('./ai/aiResponseParser');
+const { scoreCompany } = require('./leadScoring');
+const { detectOpportunities } = require('./opportunityDetectionService');
+const apiUsage = require('./apiUsageService');
+
+const NVIDIA_NOT_CONFIGURED = 'NVIDIA_NOT_CONFIGURED';
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// In-process guard only (single-server deployment, same as the rest of this app) —
+// prevents a double-click / overlapping manual+automation call from spending two
+// Nemotron calls on the same lead at once. Not a distributed lock.
+const IN_FLIGHT = new Set();
+
+async function loadLeadForAI(leadId) {
+  return Lead.findByPk(leadId, {
+    include: [
+      {
+        model: Company,
+        as: 'company',
+        include: [
+          { model: CompanyContact, as: 'contacts' },
+          { model: CompanyWebsite, as: 'websites' },
+          { model: CompanySocial, as: 'socials' },
+          { model: DetectedSignal, as: 'detectedSignals' },
+          { model: Signal, as: 'signals' },
+        ],
+      },
+    ],
+  });
+}
+
+/** Same "pick the real website audit" logic as hermesResearchService.rescoreAndQualify. */
+function websiteAuditFromCompany(company) {
+  const websites = company.websites || [];
+  const real = websites.find((w) => w.status !== 'no_website') || websites[0] || null;
+  if (!real) return null;
+  return {
+    status: real.status,
+    health: real.health,
+    isHttps: real.is_https,
+    isMobileFriendly: real.is_mobile_friendly,
+    httpStatus: real.http_status,
+    responseTimeMs: real.response_time_ms,
+    pageTitle: real.page_title,
+    metaDescription: real.meta_description,
+    technologies: real.detected_technologies,
+    signals: real.audit_signals,
+    featureFlags: real.feature_flags,
+  };
+}
+
+/**
+ * Run one Nemotron AI-qualification attempt for a lead. Never throws for an
+ * ordinary AI failure (missing key, timeout, rate limit, malformed output) —
+ * the lead's ai_processing_status/ai_processing_error carry that; the lead
+ * itself (and its deterministic score) is always preserved untouched.
+ *
+ * @param {number} leadId
+ * @param {{ triggeredBy?: 'manual'|'automation', triggeredByUserId?: number|null, force?: boolean }} opts
+ *   `force` re-runs even if this lead was already successfully AI-qualified —
+ *   otherwise a COMPLETED lead is skipped (cost control, see Lead.ai_processed_at).
+ */
+async function qualifyWithNemotron(leadId, { triggeredBy = 'manual', triggeredByUserId = null, force = false } = {}) {
+  const lead = await loadLeadForAI(leadId);
+  if (!lead) return { status: 'failed', reason: 'Lead not found' };
+  if (!lead.company) return { status: 'failed', reason: 'Lead has no associated company' };
+
+  if (!force && lead.ai_processing_status === 'COMPLETED') {
+    return { status: 'skipped', reason: 'Lead is already AI-qualified — pass force=true to re-analyze', lead };
+  }
+  if (IN_FLIGHT.has(leadId)) {
+    return { status: 'skipped', reason: 'AI qualification is already in progress for this lead' };
+  }
+
+  IN_FLIGHT.add(leadId);
+  try {
+    if (!nvidiaClient.isConfigured()) {
+      lead.ai_processing_status = 'SKIPPED';
+      lead.ai_processing_error = `${NVIDIA_NOT_CONFIGURED}: set NVIDIA_API_KEY (see server/.env.example)`;
+      lead.ai_processed_at = new Date();
+      await lead.save();
+      return { status: 'skipped', reason: NVIDIA_NOT_CONFIGURED, lead };
+    }
+
+    lead.ai_processing_status = 'RUNNING';
+    await lead.save();
+    console.log(`[ai] qualification started for lead ${leadId}`);
+
+    const company = lead.company;
+    const scoring = scoreCompany(company);
+    const websiteAudit = websiteAuditFromCompany(company);
+    const opportunities = detectOpportunities({ industry: company.industry, websiteAudit });
+    const activeSignals = (company.signals || []).filter((s) => ['NEW', 'REVIEWED'].includes(s.status));
+
+    const { system, user } = buildQualificationPrompt({
+      company,
+      lead,
+      scoring,
+      opportunities,
+      websiteAudit,
+      detectedSignals: company.detectedSignals,
+      activeSignals,
+    });
+
+    const maxAttempts = Math.max(1, config.nvidia.maxRetries + 1);
+    let lastError = null;
+    let parsed = null;
+    let attemptsUsed = 0;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      attemptsUsed = attempt;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const { content } = await nvidiaClient.completeJSON({ systemPrompt: system, userPrompt: user, kind: 'qualification' });
+        // eslint-disable-next-line no-await-in-loop
+        await apiUsage.recordUsage('nvidia', { requests: 1 });
+        const result = parseQualificationOutput(content, { allowedServices: ALLOWED_SERVICES });
+        if (result.ok) {
+          parsed = result.data;
+          lastError = null;
+          break;
+        }
+        lastError = new Error(result.error || 'Malformed Nemotron response');
+        if (attempt >= maxAttempts) break;
+      } catch (err) {
+        lastError = err;
+        if (!err.transient || attempt >= maxAttempts) break;
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(Math.min(10000, 2 ** attempt * 1000));
+      }
+    }
+
+    if (!parsed) {
+      lead.ai_processing_status = 'FAILED';
+      lead.ai_processing_error = String(lastError?.message || 'Unknown AI qualification error').slice(0, 500);
+      lead.ai_retry_count = (lead.ai_retry_count || 0) + attemptsUsed;
+      lead.ai_processed_at = new Date();
+      await lead.save();
+      console.error(`[ai] qualification failed for lead ${leadId}: ${lead.ai_processing_error}`);
+      return { status: 'failed', reason: lead.ai_processing_error, lead };
+    }
+
+    lead.ai_qualification_status = parsed.qualification.status;
+    lead.ai_confidence = parsed.qualification.confidence;
+    lead.ai_summary = parsed.business_summary;
+    lead.ai_recommended_service = parsed.relevant_service;
+    lead.ai_outreach_angle = parsed.outreach.angle;
+    lead.ai_analysis = parsed;
+    lead.ai_processing_status = 'COMPLETED';
+    lead.ai_processing_error = null;
+    lead.ai_processed_at = new Date();
+    lead.ai_retry_count = (lead.ai_retry_count || 0) + (attemptsUsed - 1);
+    lead.ai_model_version = config.nvidia.model;
+    await lead.save();
+
+    await Activity.create({
+      company_id: lead.company_id,
+      lead_id: lead.id,
+      type: 'system',
+      title: `AI qualification completed (${parsed.qualification.status.replace(/_/g, ' ')}, ${parsed.qualification.confidence}% confidence)`,
+      body: parsed.business_summary || null,
+    });
+
+    console.log(`[ai] qualification completed for lead ${leadId} (triggered by ${triggeredBy}${triggeredByUserId ? ` #${triggeredByUserId}` : ''})`);
+    return { status: 'completed', lead, analysis: parsed };
+  } finally {
+    IN_FLIGHT.delete(leadId);
+  }
+}
+
+module.exports = { qualify, industryNoun, qualifyWithNemotron, NVIDIA_NOT_CONFIGURED };

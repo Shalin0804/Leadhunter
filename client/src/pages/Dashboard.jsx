@@ -11,6 +11,10 @@ import {
   FiFileText,
   FiAward,
   FiRadio,
+  FiCpu,
+  FiUser,
+  FiTarget,
+  FiUploadCloud,
 } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
 import { dashboardApi } from '../services/endpoints';
@@ -21,6 +25,10 @@ import { fmtDate, fmtDateTime, fmtNumber } from '../utils/format';
 const CARD_META = [
   { key: 'totalCompanies', label: 'Total Companies', icon: <FiBriefcase /> },
   { key: 'newCompanies', label: 'New Companies (30d)', icon: <FiZap /> },
+  { key: 'totalLeads', label: 'Total Leads', icon: <FiTarget /> },
+  { key: 'automaticLeads', label: 'Automatic Leads', icon: <FiCpu /> },
+  { key: 'manualLeads', label: 'Manual Leads', icon: <FiUser /> },
+  { key: 'importedLeads', label: 'Imported Leads', icon: <FiUploadCloud /> },
   { key: 'qualifiedLeads', label: 'Qualified Leads', icon: <FiCheckCircle /> },
   { key: 'hotLeads', label: 'Hot Leads', icon: <FiThermometer /> },
   { key: 'warmLeads', label: 'Warm Leads', icon: <FiThermometer /> },

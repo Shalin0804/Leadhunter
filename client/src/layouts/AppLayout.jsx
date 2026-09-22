@@ -12,6 +12,7 @@ import {
   FiMenu,
   FiRadio,
   FiZap,
+  FiCpu,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/automation', label: 'Automatic Lead Gen', icon: <FiZap /> },
   { to: '/signals', label: 'Buying Signals', icon: <FiRadio /> },
   { to: '/leads', label: 'Leads', icon: <FiTarget /> },
+  { to: '/leads/automatic', label: 'Automatic Leads', icon: <FiCpu /> },
   { to: '/pipeline', label: 'Pipeline', icon: <FiColumns /> },
   { to: '/tasks', label: 'Tasks & Follow-ups', icon: <FiCheckSquare /> },
   { to: '/notes', label: 'Notes', icon: <FiFileText /> },
@@ -55,6 +57,7 @@ export default function AppLayout() {
             <NavLink
               key={n.to}
               to={n.to}
+              end={n.end}
               className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               onClick={() => setOpen(false)}
             >

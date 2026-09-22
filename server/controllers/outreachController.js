@@ -1,6 +1,6 @@
-const { Outreach, Company, Activity } = require('../models');
+const { Outreach, Company, Lead, Activity } = require('../models');
 const { scoreCompany } = require('../services/leadScoring');
-const { generate } = require('../services/outreachGeneratorService');
+const { generate, generateWithAI } = require('../services/outreachGeneratorService');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
 const { SCORING_INCLUDE } = require('../services/companyService');
@@ -15,7 +15,7 @@ exports.list = async (req, res) => {
 };
 
 exports.generate = async (req, res) => {
-  const { company_id, lead_id, channel, contact_name } = req.body;
+  const { company_id, lead_id, channel, contact_name, use_ai } = req.body;
   if (!company_id) throw ApiError.badRequest('company_id is required');
   if (!Outreach.CHANNELS.includes(channel)) throw ApiError.badRequest(`channel must be one of: ${Outreach.CHANNELS.join(', ')}`);
 
@@ -23,7 +23,16 @@ exports.generate = async (req, res) => {
   if (!company) throw ApiError.notFound('Company not found');
 
   const analysis = scoreCompany(company);
-  const draft = generate(channel, { company, analysis, contactName: contact_name });
+
+  let draft;
+  if (use_ai) {
+    // Reuse this lead's existing Nemotron qualification (if any) as extra grounding —
+    // never re-runs qualification just to generate outreach (cost control).
+    const lead = lead_id ? await Lead.findByPk(lead_id) : await Lead.findOne({ where: { company_id: company.id } });
+    draft = await generateWithAI(channel, { company, analysis, aiQualification: lead?.ai_analysis || null, contactName: contact_name });
+  } else {
+    draft = { ...generate(channel, { company, analysis, contactName: contact_name }), generatedBy: 'rule_based' };
+  }
 
   const outreach = await Outreach.create({
     lead_id: lead_id || null,
@@ -33,7 +42,7 @@ exports.generate = async (req, res) => {
     subject: draft.subject,
     body: draft.body,
     evidence: draft.evidence,
-    generated_by: 'rule_based',
+    generated_by: draft.generatedBy,
   });
 
   await Activity.create({
@@ -45,7 +54,7 @@ exports.generate = async (req, res) => {
     body: draft.subject || draft.body.slice(0, 120),
   });
 
-  return ok(res, { outreach }, 201);
+  return ok(res, { outreach, ai_error: draft.aiError || null }, 201);
 };
 
 exports.remove = async (req, res) => {

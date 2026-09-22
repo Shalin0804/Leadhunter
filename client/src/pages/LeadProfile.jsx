@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap, FiSearch } from 'react-icons/fi';
+import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap, FiSearch, FiCpu, FiRefreshCw } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
 import { leadApi, companyApi, hermesApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
@@ -17,7 +17,11 @@ import {
   CONTACT_STATUS_LABELS,
   LEAD_QUALIFICATION_LABELS,
   CONTACT_METHOD_LABELS,
+  AI_QUALIFICATION_LABELS,
+  AI_PROCESSING_STATUS_LABELS,
 } from '../utils/format';
+
+const AI_STATUS_TONE = { high_potential: 'green', medium_potential: 'warm', low_potential: 'gray', insufficient_data: 'gray' };
 
 const STATUSES = Object.keys(STATUS_LABELS);
 const Row = ({ label, children }) => (
@@ -34,6 +38,24 @@ export default function LeadProfile() {
   const [modal, setModal] = useState(null);
   const { data, loading, error, reload } = useApi(() => leadApi.get(id), [id]);
   const companyId = data?.lead?.company_id;
+  const [aiBusy, setAiBusy] = useState(false);
+
+  const runAIAnalysis = async (reanalyze) => {
+    setAiBusy(true);
+    try {
+      const res = reanalyze ? await leadApi.reanalyzeAI(id) : await leadApi.analyzeAI(id);
+      if (res.status === 'completed') toast.success('AI qualification complete');
+      else if (res.status === 'skipped' && res.reason === 'NVIDIA_NOT_CONFIGURED') {
+        toast.error('AI qualification not run: NVIDIA is not configured on the server (NVIDIA_API_KEY missing)');
+      } else if (res.status === 'skipped') toast.success(res.reason || 'Already AI-qualified');
+      else if (res.status === 'failed') toast.error(`AI qualification failed: ${res.reason || 'unknown error'}`);
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const [hermesRun, setHermesRun] = useState(null);
   const [hermesEvidence, setHermesEvidence] = useState(null);
@@ -312,7 +334,7 @@ export default function LeadProfile() {
           </Card>
 
           {(lead.ai_problem || lead.ai_sales_angle) && (
-            <Card title="AI Qualification">
+            <Card title="Rule-based Qualification">
               {lead.ai_problem && (
                 <>
                   <div className="section-title">Problem</div>
@@ -335,6 +357,99 @@ export default function LeadProfile() {
               )}
             </Card>
           )}
+
+          <Card
+            title="AI Qualification (Nemotron)"
+            actions={
+              <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                {lead.ai_processing_status === 'COMPLETED' ? (
+                  <button className="btn btn-sm" onClick={() => runAIAnalysis(true)} disabled={aiBusy}>
+                    <FiRefreshCw /> {aiBusy ? 'Re-analyzing…' : 'Re-analyze'}
+                  </button>
+                ) : (
+                  <button className="btn btn-sm" onClick={() => runAIAnalysis(false)} disabled={aiBusy}>
+                    <FiCpu /> {aiBusy ? 'Analyzing…' : 'Analyze Lead'}
+                  </button>
+                )}
+              </div>
+            }
+          >
+            {lead.ai_processing_status && lead.ai_processing_status !== 'NOT_ANALYZED' && (
+              <div className="mb-3">
+                <span className={`badge ${lead.ai_processing_status === 'COMPLETED' ? 'green' : lead.ai_processing_status === 'FAILED' ? 'not_qualified' : 'gray'}`}>
+                  {AI_PROCESSING_STATUS_LABELS[lead.ai_processing_status] || lead.ai_processing_status}
+                </span>
+                {lead.ai_processed_at && <span className="cell-sub" style={{ marginLeft: 8 }}>{fmtDateTime(lead.ai_processed_at)}</span>}
+              </div>
+            )}
+
+            {lead.ai_processing_status === 'SKIPPED' && (
+              <p className="text-muted text-sm">
+                {lead.ai_processing_error?.startsWith('NVIDIA_NOT_CONFIGURED')
+                  ? 'NVIDIA is not configured on the server (NVIDIA_API_KEY missing) — set it to enable Nemotron AI qualification.'
+                  : lead.ai_processing_error}
+              </p>
+            )}
+            {lead.ai_processing_status === 'FAILED' && (
+              <p className="text-sm" style={{ color: 'var(--danger, #d33)' }}>{lead.ai_processing_error}</p>
+            )}
+            {(!lead.ai_processing_status || lead.ai_processing_status === 'NOT_ANALYZED') && (
+              <p className="text-muted text-sm">Not analyzed yet — click "Analyze Lead" to run Nemotron AI qualification.</p>
+            )}
+
+            {lead.ai_processing_status === 'COMPLETED' && (
+              <>
+                <dl className="def-list">
+                  <Row label="Qualification">
+                    <span className={`badge ${AI_STATUS_TONE[lead.ai_qualification_status] || 'gray'}`}>
+                      {AI_QUALIFICATION_LABELS[lead.ai_qualification_status] || lead.ai_qualification_status}
+                    </span>
+                    {lead.ai_confidence != null && <span className="cell-sub" style={{ marginLeft: 8 }}>{lead.ai_confidence}% confidence</span>}
+                  </Row>
+                  {lead.ai_analysis?.qualification?.reason && <Row label="Reason">{lead.ai_analysis.qualification.reason}</Row>}
+                  <Row label="Relevant Codefloor service">{lead.ai_recommended_service || '—'}</Row>
+                  {lead.ai_analysis?.website_quality?.score != null && <Row label="Website quality">{lead.ai_analysis.website_quality.score}/100</Row>}
+                </dl>
+
+                {lead.ai_summary && (
+                  <>
+                    <div className="section-title mt-4">Business summary</div>
+                    <p className="text-sm mt-2">{lead.ai_summary}</p>
+                  </>
+                )}
+                {lead.ai_analysis?.website_quality?.issues?.length > 0 && (
+                  <>
+                    <div className="section-title mt-4">Website issues</div>
+                    <ul className="reason-list">
+                      {lead.ai_analysis.website_quality.issues.map((x, i) => <li key={i}>{x}</li>)}
+                    </ul>
+                  </>
+                )}
+                {lead.ai_analysis?.likely_business_needs?.length > 0 && (
+                  <>
+                    <div className="section-title mt-4">Likely business needs</div>
+                    <ul className="reason-list">
+                      {lead.ai_analysis.likely_business_needs.map((x, i) => <li key={i}>{x}</li>)}
+                    </ul>
+                  </>
+                )}
+                {lead.ai_analysis?.buying_signals?.length > 0 && (
+                  <>
+                    <div className="section-title mt-4">Buying signals</div>
+                    <ul className="reason-list">
+                      {lead.ai_analysis.buying_signals.map((x, i) => <li key={i}>{x}</li>)}
+                    </ul>
+                  </>
+                )}
+                {lead.ai_outreach_angle && (
+                  <>
+                    <div className="section-title mt-4">Recommended outreach angle</div>
+                    <p className="text-sm mt-2">{lead.ai_outreach_angle}</p>
+                  </>
+                )}
+              </>
+            )}
+          </Card>
 
           <Card
             title="Hermes Research"

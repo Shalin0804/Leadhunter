@@ -4,12 +4,13 @@ import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw, FiClock, FiStar, 
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
-import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
+import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { ContactLeadModal, RecontactModal } from '../components/contactModals';
-import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS } from '../utils/format';
+import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
 const CONTACT_STATUSES = Object.keys(CONTACT_STATUS_LABELS);
+const SOURCES = Object.keys(LEAD_SOURCE_LABELS);
 const TEMPS = ['HOT', 'WARM', 'MEDIUM', 'LOW'];
 const STRENGTH_ORDER = { HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
 
@@ -58,6 +59,7 @@ export default function Leads() {
       assigned_user_id: get('assigned_user_id'),
       industry: get('industry'),
       state: get('state'),
+      source: get('source'),
       min_score: get('min_score'),
       created_from: get('created_from'),
       follow_up_due: get('follow_up_due'),
@@ -148,6 +150,13 @@ export default function Leads() {
             <input className="input" value={get('state')} onChange={(e) => setParam('state', e.target.value)} />
           </div>
           <div className="field">
+            <label>Lead source</label>
+            <select className="select" value={get('source')} onChange={(e) => setParam('source', e.target.value)}>
+              <option value="">Any</option>
+              {SOURCES.map((s) => <option key={s} value={s}>{LEAD_SOURCE_LABELS[s]}</option>)}
+            </select>
+          </div>
+          <div className="field">
             <label>Min score</label>
             <input className="input" type="number" value={get('min_score')} onChange={(e) => setParam('min_score', e.target.value)} />
           </div>
@@ -185,6 +194,7 @@ export default function Leads() {
                     <th>Opportunity</th>
                     <th>Buying signal</th>
                     <th>Lead score</th>
+                    <th>Source</th>
                     <th>Priority</th>
                     <th>Contact status</th>
                     <th>Last contacted</th>
@@ -245,6 +255,7 @@ export default function Leads() {
                           )}
                         </td>
                         <td><ScoreBadge value={l.lead_score} /></td>
+                        <td><SourceBadge value={l.source} /></td>
                         <td className="text-sm">{l.priority}</td>
                         <td><span className={`badge ${CONTACT_TONE[l.contact_status] || 'gray'}`}>{CONTACT_STATUS_LABELS[l.contact_status]}</span></td>
                         <td className="nowrap text-sm">{fmtDateTime(l.last_contacted_at)}</td>

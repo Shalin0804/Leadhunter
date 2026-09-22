@@ -46,6 +46,9 @@ exports.stats = async (req, res) => {
     warmLeads,
     mediumLeads,
     interestedLeads,
+    automaticLeads,
+    manualLeads,
+    importedLeads,
   ] = await Promise.all([
     Company.count(),
     Company.count({ where: { date_of_incorporation: { [Op.gte]: recentDate } } }),
@@ -66,6 +69,9 @@ exports.stats = async (req, res) => {
     Lead.count({ where: { lead_temperature: 'WARM' } }),
     Lead.count({ where: { lead_temperature: 'MEDIUM' } }),
     Lead.count({ where: { contact_status: 'INTERESTED' } }),
+    Lead.count({ where: { source: 'automation' } }),
+    Lead.count({ where: { source: 'manual' } }),
+    Lead.count({ where: { source: 'imported' } }),
   ]);
 
   // charts — run in parallel
@@ -136,6 +142,10 @@ exports.stats = async (req, res) => {
       warmLeads,
       mediumLeads,
       interestedLeads,
+      totalLeads,
+      automaticLeads,
+      manualLeads,
+      importedLeads,
     },
     charts: {
       newByDay: numify(newByDay, 'count'),

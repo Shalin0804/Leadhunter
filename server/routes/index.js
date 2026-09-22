@@ -28,5 +28,6 @@ router.use('/automation', require('./automation.routes'));
 router.use('/outreach', require('./outreach.routes'));
 router.use('/dashboard', require('./dashboard.routes'));
 router.use('/hermes', require('./hermes.routes'));
+router.use('/ai', require('./ai.routes'));
 
 module.exports = router;

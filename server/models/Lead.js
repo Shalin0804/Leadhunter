@@ -38,6 +38,11 @@ const CONTACT_STATUSES = [
 
 const CONTACT_METHODS = ['EMAIL', 'WHATSAPP', 'PHONE', 'LINKEDIN', 'INSTAGRAM', 'OTHER'];
 
+// Nemotron (NVIDIA NIM) AI qualification verdict — an additional intelligence signal
+// layered on top of lead_score/lead_temperature above, never a replacement for them.
+const AI_QUALIFICATION_STATUSES = ['high_potential', 'medium_potential', 'low_potential', 'insufficient_data'];
+const AI_PROCESSING_STATUSES = ['NOT_ANALYZED', 'PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'];
+
 // Score-derived priority tier (Prospecting Engine 2.0): 80-100 HOT, 60-79 WARM,
 // 50-59 MEDIUM, 0-49 LOW. Replaces the earlier 5-tier HOT/HIGH/WARM/LOW/NOT_QUALIFIED
 // scale — see seed/migrate.js for the one-time data remap (HIGH->WARM, NOT_QUALIFIED->LOW).
@@ -95,6 +100,23 @@ module.exports = (sequelize) => {
       ai_evidence: { type: DataTypes.JSON, allowNull: true },
       ai_sales_angle: { type: DataTypes.TEXT, allowNull: true }, // outreach_angle
 
+      // Nemotron (NVIDIA NIM) AI qualification — a second, LLM-backed intelligence
+      // layer on top of the rule-based ai_problem/ai_evidence/ai_sales_angle above and
+      // the deterministic lead_score/recommended_service. Populated by
+      // aiQualificationService.qualifyWithNemotron(); never invented, never required —
+      // every field here stays null until NVIDIA_API_KEY is configured and a run succeeds.
+      ai_qualification_status: { type: DataTypes.ENUM(...AI_QUALIFICATION_STATUSES), allowNull: true },
+      ai_confidence: { type: DataTypes.INTEGER, allowNull: true }, // 0-100, Nemotron's own confidence
+      ai_summary: { type: DataTypes.TEXT, allowNull: true }, // business_summary
+      ai_recommended_service: { type: DataTypes.STRING(60), allowNull: true }, // one of Codefloor's 5 configured services (relevant_service)
+      ai_outreach_angle: { type: DataTypes.TEXT, allowNull: true }, // outreach.angle
+      ai_analysis: { type: DataTypes.JSON, allowNull: true }, // full structured Nemotron response (business_summary/website_quality/technology_opportunities/...)
+      ai_processing_status: { type: DataTypes.ENUM(...AI_PROCESSING_STATUSES), allowNull: false, defaultValue: 'NOT_ANALYZED' },
+      ai_processing_error: { type: DataTypes.STRING(500), allowNull: true },
+      ai_processed_at: { type: DataTypes.DATE, allowNull: true },
+      ai_retry_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      ai_model_version: { type: DataTypes.STRING(80), allowNull: true },
+
       estimated_value: { type: DataTypes.DECIMAL(14, 2), allowNull: true },
       next_follow_up_at: { type: DataTypes.DATE, allowNull: true },
       last_contacted_at: { type: DataTypes.DATE, allowNull: true },
@@ -126,6 +148,8 @@ module.exports = (sequelize) => {
   Lead.LEAD_TEMPERATURES = LEAD_TEMPERATURES;
   Lead.ALREADY_ENGAGED_CONTACT_STATUSES = ALREADY_ENGAGED_CONTACT_STATUSES;
   Lead.CONTACT_TO_PIPELINE = CONTACT_TO_PIPELINE;
+  Lead.AI_QUALIFICATION_STATUSES = AI_QUALIFICATION_STATUSES;
+  Lead.AI_PROCESSING_STATUSES = AI_PROCESSING_STATUSES;
   return Lead;
 };
 
@@ -136,3 +160,5 @@ module.exports.CONTACT_METHODS = CONTACT_METHODS;
 module.exports.LEAD_TEMPERATURES = LEAD_TEMPERATURES;
 module.exports.ALREADY_ENGAGED_CONTACT_STATUSES = ALREADY_ENGAGED_CONTACT_STATUSES;
 module.exports.CONTACT_TO_PIPELINE = CONTACT_TO_PIPELINE;
+module.exports.AI_QUALIFICATION_STATUSES = AI_QUALIFICATION_STATUSES;
+module.exports.AI_PROCESSING_STATUSES = AI_PROCESSING_STATUSES;

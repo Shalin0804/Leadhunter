@@ -67,6 +67,23 @@ module.exports = {
     triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),
   },
 
+  nvidia: {
+    // NVIDIA NIM (https://integrate.api.nvidia.com/v1), OpenAI-compatible Chat
+    // Completions API, used as LeadHunter's AI intelligence layer (qualification +
+    // outreach generation). Leave NVIDIA_API_KEY blank to disable — every AI step
+    // no-ops safely (deterministic scoring/qualification/outreach keep working
+    // exactly as they do today). NEVER hardcode a real key here or anywhere else.
+    apiKey: env('NVIDIA_API_KEY', ''),
+    baseUrl: env('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1'),
+    model: env('NVIDIA_MODEL', 'nvidia/nemotron-3-ultra-550b-a55b'),
+    timeoutMs: parseInt(env('NVIDIA_TIMEOUT_MS', '30000'), 10),
+    // Retries on a transient (network/5xx/timeout/rate-limit) failure before giving up.
+    maxRetries: parseInt(env('NVIDIA_MAX_RETRIES', '2'), 10),
+    // When true, returns a canned fixture instead of calling NVIDIA — safe for local
+    // dev/tests without a configured key or spending real API credits.
+    testMode: env('NVIDIA_TEST_MODE', 'false') === 'true',
+  },
+
   hermes: {
     // Base URL of your locally-running (or hosted) Hermes Agent gateway, e.g.
     // http://127.0.0.1:PORT — see server/.env.example for how to get a fixed

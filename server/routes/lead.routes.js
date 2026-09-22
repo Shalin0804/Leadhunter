@@ -30,6 +30,8 @@ router.patch(
   asyncHandler(ctrl.updateLeadStatus)
 );
 router.post('/:id/recontact', asyncHandler(ctrl.recontact));
+router.post('/:id/ai/analyze', asyncHandler(ctrl.analyzeAI));
+router.post('/:id/ai/reanalyze', asyncHandler(ctrl.reanalyzeAI));
 router.delete('/:id', asyncHandler(ctrl.remove));
 
 module.exports = router;

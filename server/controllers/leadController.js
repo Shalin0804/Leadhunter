@@ -12,11 +12,13 @@ const {
   CompanyContact,
   CompanyWebsite,
   DetectedSignal,
+  LeadSource,
 } = require('../models');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const { likeOp } = require('../utils/dialect');
 const ApiError = require('../utils/ApiError');
 const { convertCompanyToLead, changeLeadStatus, markContacted, setContactStatus, setLeadStatus, recontact } = require('../services/leadService');
+const { qualifyWithNemotron } = require('../services/aiQualificationService');
 const { sendCsv } = require('../utils/csv');
 
 const companyAttrs = ['id', 'company_name', 'cin', 'industry', 'state', 'city', 'website', 'date_of_incorporation'];
@@ -67,6 +69,7 @@ function companyWhere(q) {
     cw[Op.or] = [
       { company_name: { [likeOp]: `%${q.search}%` } },
       { cin: { [likeOp]: `%${q.search}%` } },
+      { website: { [likeOp]: `%${q.search}%` } },
     ];
   }
   return Object.keys(cw).length || Object.getOwnPropertySymbols(cw).length ? cw : undefined;
@@ -102,6 +105,14 @@ exports.list = async (req, res) => {
           { model: CompanyContact, as: 'contacts' },
           { model: CompanyWebsite, as: 'websites' },
           { model: DetectedSignal, as: 'detectedSignals' },
+          {
+            model: LeadSource,
+            as: 'sources',
+            attributes: ['provider', 'search_run_id', 'discovered_at'],
+            separate: true,
+            limit: 3,
+            order: [['discovered_at', 'DESC']],
+          },
         ],
         ...(cw ? { where: cw, required: true } : {}),
       },
@@ -160,6 +171,14 @@ exports.get = async (req, res) => {
           { model: CompanyContact, as: 'contacts' },
           { model: CompanyWebsite, as: 'websites' },
           { model: DetectedSignal, as: 'detectedSignals' },
+          {
+            model: LeadSource,
+            as: 'sources',
+            attributes: ['provider', 'search_run_id', 'discovered_at'],
+            separate: true,
+            limit: 5,
+            order: [['discovered_at', 'DESC']],
+          },
         ],
       },
       { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
@@ -315,4 +334,27 @@ exports.remove = async (req, res) => {
   if (!lead) throw ApiError.notFound('Lead not found');
   await lead.destroy();
   return ok(res, { message: 'Lead deleted' });
+};
+
+// [ ANALYZE LEAD ] — Nemotron AI qualification. Idempotent: no-ops (status: 'skipped')
+// if this lead was already successfully AI-qualified, so repeated clicks never spend
+// an extra API call. Never throws for an ordinary AI failure — see qualifyWithNemotron.
+exports.analyzeAI = async (req, res) => {
+  const result = await qualifyWithNemotron(req.params.id, { triggeredBy: 'manual', triggeredByUserId: req.user.id, force: false });
+  if (result.status === 'failed' && result.reason === 'Lead not found') throw ApiError.notFound('Lead not found');
+  const full = result.lead
+    ? await Lead.findByPk(result.lead.id, { include: [{ model: Company, as: 'company', attributes: companyAttrs }] })
+    : null;
+  return ok(res, { status: result.status, reason: result.reason, lead: full });
+};
+
+// [ RE-ANALYZE LEAD ] — same as above but always makes a fresh Nemotron call, even if
+// this lead already has a completed AI qualification (data may have changed since).
+exports.reanalyzeAI = async (req, res) => {
+  const result = await qualifyWithNemotron(req.params.id, { triggeredBy: 'manual', triggeredByUserId: req.user.id, force: true });
+  if (result.status === 'failed' && result.reason === 'Lead not found') throw ApiError.notFound('Lead not found');
+  const full = result.lead
+    ? await Lead.findByPk(result.lead.id, { include: [{ model: Company, as: 'company', attributes: companyAttrs }] })
+    : null;
+  return ok(res, { status: result.status, reason: result.reason, lead: full });
 };

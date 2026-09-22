@@ -39,6 +39,8 @@ module.exports = (sequelize) => {
       verified_emails: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       warm_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       medium_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      ai_qualified_leads: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }, // Nemotron qualification succeeded
+      ai_qualification_failures: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       errors: { type: DataTypes.JSON, allowNull: true }, // capped array of {provider|step, message} — never throws the run
 
       error_message: { type: DataTypes.TEXT, allowNull: true },

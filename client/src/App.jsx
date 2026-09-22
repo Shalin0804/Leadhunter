@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Discovery from './pages/Discovery';
 import CompanyProfile from './pages/CompanyProfile';
 import Leads from './pages/Leads';
+import AutomaticLeads from './pages/AutomaticLeads';
 import LeadProfile from './pages/LeadProfile';
 import Pipeline from './pages/Pipeline';
 import Tasks from './pages/Tasks';
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/automation/runs/:id" element={<AutomationRunDetail />} />
         <Route path="/companies/:id" element={<CompanyProfile />} />
         <Route path="/leads" element={<Leads />} />
+        <Route path="/leads/automatic" element={<AutomaticLeads />} />
         <Route path="/leads/:id" element={<LeadProfile />} />
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/tasks" element={<Tasks />} />

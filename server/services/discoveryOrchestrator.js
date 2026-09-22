@@ -26,7 +26,7 @@ const { auditWebsite } = require('./websiteAuditService');
 const { detectOpportunities } = require('./opportunityDetectionService');
 const { detectAndSaveSignals } = require('./signalDetectionService');
 const { enrichCompany, isEligibleForEnrichment, HUNTER_NOT_CONFIGURED } = require('./enrichmentService');
-const { qualify } = require('./aiQualificationService');
+const { qualify, qualifyWithNemotron } = require('./aiQualificationService');
 const { rescoreCompany } = require('./companyService');
 const apiUsage = require('./apiUsageService');
 const { getSettings } = require('./automationSettingsService');
@@ -186,6 +186,8 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
     verified_emails: 0,
     new_companies: 0,
     websites_analyzed: 0,
+    ai_qualified_leads: 0,
+    ai_qualification_failures: 0,
   };
   const errors = [];
   const providersUsed = [];
@@ -372,6 +374,28 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
             lead.ai_sales_angle = qualification.salesAngle;
           }
           await lead.save();
+        }
+
+        // Nemotron AI qualification — an additional intelligence layer on top of the
+        // deterministic score/qualification above, never a replacement for them. A
+        // no-op (ai_processing_status='SKIPPED') when NVIDIA_API_KEY isn't set; never
+        // throws, never blocks/loses the lead itself. qualifyWithNemotron() skips a
+        // lead that's already COMPLETED, so this is naturally a one-time cost per lead.
+        if (settings.autoAIQualification) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const aiResult = await qualifyWithNemotron(lead.id, { triggeredBy: 'automation' });
+            if (aiResult.status === 'completed') counters.ai_qualified_leads += 1;
+            else if (aiResult.status === 'failed') {
+              counters.ai_qualification_failures += 1;
+              errors.push({ step: `ai_qualification:lead_${lead.id}`, message: aiResult.reason });
+            }
+          } catch (aiErr) {
+            counters.ai_qualification_failures += 1;
+            errors.push({ step: `ai_qualification:lead_${lead.id}`, message: aiErr.message });
+            // eslint-disable-next-line no-console
+            console.error(`[ai] qualification threw for lead ${lead.id}:`, aiErr.message);
+          }
         }
       } catch (itemErr) {
         counters.failed_requests += 1;

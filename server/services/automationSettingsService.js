@@ -16,6 +16,10 @@ const DEFAULTS = {
   autoEnrichContacts: true,
   autoDetectBuyingSignals: true,
   autoSaveQualifiedLeads: true,
+  // Nemotron (NVIDIA NIM) AI qualification for every newly-created lead — a no-op
+  // (Lead.ai_processing_status='SKIPPED') whenever NVIDIA_API_KEY isn't configured,
+  // so this stays true by default without spending anything on a fresh install.
+  autoAIQualification: true,
   provider: 'osm', // osm | google_places — legacy single-provider field, kept for back-compat
   discoveryProviders: ['osm'], // osm | google_places | yelp — a target is run against every listed provider whose isConfigured() is true
 
@@ -39,6 +43,7 @@ const ALIASES = {
   daily_limit: 'dailyLeadLimit',
   discovery_providers: 'discoveryProviders',
   enrichment_enabled: 'autoEnrichContacts',
+  ai_qualification_enabled: 'autoAIQualification',
   enrichment_min_score: 'enrichmentThreshold',
   enrichment_refresh_days: 'enrichmentRefreshDays',
   min_lead_score: 'minLeadScore',

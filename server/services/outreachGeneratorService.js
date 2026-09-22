@@ -72,4 +72,61 @@ function generate(channel, { company, analysis, contactName }) {
   return { channel, subject: subject || null, body, evidence };
 }
 
-module.exports = { generate, pickEvidence };
+/**
+ * ---------------------------------------------------------------------------
+ * AI-generated outreach (Nemotron via NVIDIA NIM) — an optional alternative to
+ * the template-based `generate()` above, not a replacement for it. Same
+ * non-fabrication contract: the prompt only ever contains real, already-
+ * collected facts (see outreachPromptBuilder), and if Nemotron is unconfigured
+ * or fails for any reason, this transparently falls back to the deterministic
+ * `generate()` above — outreach generation itself never breaks.
+ * ---------------------------------------------------------------------------
+ */
+const config = require('../config/config');
+const nvidiaClient = require('./ai/nvidiaClient');
+const { buildOutreachPrompt } = require('./ai/outreachPromptBuilder');
+const { parseOutreachOutput } = require('./ai/aiResponseParser');
+const apiUsage = require('./apiUsageService');
+
+/**
+ * @returns {{ channel, subject, body, evidence, generatedBy: 'nemotron'|'rule_based', aiError?: string }}
+ */
+async function generateWithAI(channel, { company, analysis, aiQualification, contactName } = {}) {
+  const fallback = () => ({ ...generate(channel, { company, analysis, contactName }), generatedBy: 'rule_based' });
+
+  if (!nvidiaClient.isConfigured()) {
+    return { ...fallback(), aiError: 'NVIDIA_NOT_CONFIGURED: set NVIDIA_API_KEY (see server/.env.example)' };
+  }
+
+  const { system, user } = buildOutreachPrompt({ channel, company, analysis, aiQualification, contactName });
+  const maxAttempts = Math.max(1, config.nvidia.maxRetries + 1);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { content } = await nvidiaClient.completeJSON({ systemPrompt: system, userPrompt: user, kind: 'outreach', maxTokens: 600 });
+      // eslint-disable-next-line no-await-in-loop
+      await apiUsage.recordUsage('nvidia', { requests: 1 });
+      const result = parseOutreachOutput(content);
+      if (result.ok) {
+        return {
+          channel,
+          subject: result.data.subject,
+          body: result.data.body,
+          evidence: result.data.personalization_points.length ? result.data.personalization_points : pickEvidence(company, analysis),
+          generatedBy: 'nemotron',
+        };
+      }
+      lastError = new Error(result.error || 'Malformed Nemotron outreach response');
+    } catch (err) {
+      lastError = err;
+      if (!err.transient) break;
+    }
+  }
+
+  console.error(`[ai] outreach generation failed (${channel}), falling back to rule-based: ${lastError?.message}`);
+  return { ...fallback(), aiError: String(lastError?.message || 'Unknown AI outreach error').slice(0, 500) };
+}
+
+module.exports = { generate, pickEvidence, generateWithAI };

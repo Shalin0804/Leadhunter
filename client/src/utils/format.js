@@ -121,6 +121,12 @@ export const CONTACT_STATUS_LABELS = {
   DO_NOT_CONTACT: 'Do Not Contact',
 };
 
+export const LEAD_SOURCE_LABELS = {
+  manual: 'Manual',
+  automation: 'Automatic',
+  imported: 'Imported',
+};
+
 export const LEAD_QUALIFICATION_LABELS = {
   NEW: 'New',
   QUALIFIED: 'Qualified',
@@ -135,6 +141,22 @@ export const CONTACT_METHOD_LABELS = {
   LINKEDIN: 'LinkedIn',
   INSTAGRAM: 'Instagram',
   OTHER: 'Other',
+};
+
+export const AI_QUALIFICATION_LABELS = {
+  high_potential: 'High Potential',
+  medium_potential: 'Medium Potential',
+  low_potential: 'Low Potential',
+  insufficient_data: 'Insufficient Data',
+};
+
+export const AI_PROCESSING_STATUS_LABELS = {
+  NOT_ANALYZED: 'Not Analyzed',
+  PENDING: 'Pending',
+  RUNNING: 'Analyzing…',
+  COMPLETED: 'Analyzed',
+  FAILED: 'Failed',
+  SKIPPED: 'Skipped',
 };
 
 export const OPPORTUNITY_LABELS = {

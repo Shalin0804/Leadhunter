@@ -160,14 +160,16 @@ export function OutreachModal({ open, onClose, companyId, leadId }) {
   const toast = useToast();
   const [channel, setChannel] = useState('EMAIL');
   const [contactName, setContactName] = useState('');
+  const [useAI, setUseAI] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(null);
 
   const run = async () => {
     setBusy(true);
     try {
-      const res = await outreachApi.generate({ company_id: companyId, lead_id: leadId, channel, contact_name: contactName || undefined });
+      const res = await outreachApi.generate({ company_id: companyId, lead_id: leadId, channel, contact_name: contactName || undefined, use_ai: useAI });
       setDraft(res.outreach);
+      if (useAI && res.ai_error) toast.error(`AI unavailable — used the rule-based template instead (${res.ai_error})`);
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -200,9 +202,18 @@ export function OutreachModal({ open, onClose, companyId, leadId }) {
           <input className="input" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="e.g. Priya" />
         </div>
       </div>
+      <label className="flex items-center gap-2 text-sm mb-3" style={{ cursor: 'pointer' }}>
+        <input type="checkbox" checked={useAI} onChange={(e) => setUseAI(e.target.checked)} />
+        Generate with AI (Nemotron) — falls back to the rule-based template if unavailable
+      </label>
 
       {draft && (
         <div className="card card-pad" style={{ background: 'var(--surface-2)' }}>
+          <div className="mb-2">
+            <span className={`badge ${draft.generated_by === 'nemotron' ? 'blue' : 'gray'}`}>
+              {draft.generated_by === 'nemotron' ? 'AI-generated (Nemotron)' : 'Rule-based template'}
+            </span>
+          </div>
           {draft.subject && <div className="mb-2"><strong>Subject:</strong> {draft.subject}</div>}
           <div style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{draft.body}</div>
           {draft.evidence?.length > 0 && (
