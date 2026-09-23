@@ -84,6 +84,20 @@ module.exports = {
     testMode: env('NVIDIA_TEST_MODE', 'false') === 'true',
   },
 
+  leadiq: {
+    // LeadIQ's public GraphQL API (https://developer.leadiq.com/), used as an
+    // additional real-lead discovery/enrichment source. Auth is HTTP Basic with
+    // this key as the username and an empty password (confirmed against the
+    // live API — NOT documented with an example anywhere public). Leave blank
+    // to disable — the pipeline runs exactly as it does today.
+    apiKey: env('LEADIQ_API_KEY', ''),
+    baseUrl: env('LEADIQ_BASE_URL', 'https://api.leadiq.com/graphql'),
+    timeoutMs: parseInt(env('LEADIQ_TIMEOUT_MS', '20000'), 10),
+    // trackContacts (reveal email/phone) is an async job; this bounds how long
+    // we poll trackedContacts before giving up.
+    revealTimeoutMs: parseInt(env('LEADIQ_REVEAL_TIMEOUT_MS', '60000'), 10),
+  },
+
   hermes: {
     // Base URL of your locally-running (or hosted) Hermes Agent gateway, e.g.
     // http://127.0.0.1:PORT — see server/.env.example for how to get a fixed

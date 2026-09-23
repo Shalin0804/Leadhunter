@@ -8,6 +8,7 @@ const OsmBusinessProvider = require('./OsmBusinessProvider');
 const GooglePlacesProvider = require('./GooglePlacesProvider');
 const YelpBusinessProvider = require('./YelpBusinessProvider');
 const HunterProvider = require('./HunterProvider');
+const LeadIQProvider = require('./LeadIQProvider');
 
 // Provider registry — add new sources here.
 const registry = {
@@ -24,7 +25,13 @@ const discoveryRegistry = {
   osm: new OsmBusinessProvider(),
   google_places: new GooglePlacesProvider(),
   yelp: new YelpBusinessProvider(),
+  leadiq: new LeadIQProvider(),
 };
+
+// LeadIQ also exposes richer person-level search/reveal (contact preview + explicit
+// credit-costing reveal) that the generic searchBusinesses() contract doesn't carry —
+// leadiqController talks to this singleton directly for that, same instance as above.
+const leadiqProvider = discoveryRegistry.leadiq;
 
 // Separate registry for *contact enrichment* sources (domainSearch()/verifyEmail()).
 const enrichmentRegistry = {
@@ -69,6 +76,8 @@ module.exports = {
   GooglePlacesProvider,
   YelpBusinessProvider,
   HunterProvider,
+  LeadIQProvider,
+  leadiqProvider,
   registry,
   discoveryRegistry,
   enrichmentRegistry,

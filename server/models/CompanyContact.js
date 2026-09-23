@@ -9,7 +9,11 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
       company_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
-      type: { type: DataTypes.ENUM('email', 'phone'), allowNull: false },
+      // 'linkedin' — a named decision-maker found with NO email/phone yet (e.g. a LeadIQ
+      // profile-search hit before the separate, credit-costing reveal step runs). Keeps a
+      // real, identified contact from being silently dropped just because contact details
+      // haven't been unlocked — value holds the LinkedIn profile URL for this type.
+      type: { type: DataTypes.ENUM('email', 'phone', 'linkedin'), allowNull: false },
       value: { type: DataTypes.STRING(180), allowNull: false },
       label: { type: DataTypes.STRING(60), allowNull: true },
       is_primary: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

@@ -4,7 +4,7 @@ import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, 
 import { useApi } from '../hooks/useApi';
 import { leadApi, companyApi, hermesApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
-import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge } from '../components/ui';
+import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
 import { ContactLeadModal, ContactStatusModal, RecontactModal, OutreachModal } from '../components/contactModals';
 import {
@@ -127,6 +127,7 @@ export default function LeadProfile() {
   const { lead, activities, tasks, notes } = data;
   const emails = lead.company?.contacts?.filter((c) => c.type === 'email') || [];
   const phones = lead.company?.contacts?.filter((c) => c.type === 'phone') || [];
+  const linkedinOnly = lead.company?.contacts?.filter((c) => c.type === 'linkedin') || [];
   const primaryWebsite = lead.company?.websites?.[0];
 
   const enrichNow = async () => {
@@ -283,7 +284,7 @@ export default function LeadProfile() {
               <Row label="Contacted at">{fmtDateTime(lead.contacted_at)}</Row>
               <Row label="Last contacted">{fmtDateTime(lead.last_contacted_at)}</Row>
               <Row label="Created">{fmtDate(lead.created_at)}</Row>
-              <Row label="Source">{lead.source === 'automation' ? <span className="badge blue">Automation</span> : 'Manual'}</Row>
+              <Row label="Source"><SourceBadge value={lead.source} /></Row>
               {lead.lost_reason && <Row label="Lost reason">{lead.lost_reason}</Row>}
             </dl>
           </Card>
@@ -319,6 +320,23 @@ export default function LeadProfile() {
               ))
             ) : (
               <p className="text-muted text-sm mb-3">No phone on file yet.</p>
+            )}
+            {linkedinOnly.length > 0 && (
+              linkedinOnly.map((c) => (
+                <dl className="def-list mb-3" key={c.id}>
+                  <Row label="Decision-maker">
+                    {c.contact_name}
+                    {c.job_title && <span className="cell-sub"> — {c.job_title}</span>}
+                  </Row>
+                  <Row label="LinkedIn">
+                    <a href={c.value} target="_blank" rel="noreferrer">{c.value}</a>
+                  </Row>
+                  <Row label="Contact details">
+                    <span className="badge gray">Not yet revealed</span>
+                    <span className="cell-sub" style={{ marginLeft: 8 }}>via {c.source || 'unknown'}</span>
+                  </Row>
+                </dl>
+              ))
             )}
             <dl className="def-list">
               <Row label="Website">

@@ -71,7 +71,7 @@ export const StatusBadge = ({ value }) => (
   <span className={`badge ${STATUS_TONE[value] || 'gray'}`}>{STATUS_LABELS[value] || value}</span>
 );
 
-const SOURCE_TONE = { automation: 'blue', manual: 'gray', imported: 'warm' };
+const SOURCE_TONE = { automation: 'blue', manual: 'gray', imported: 'warm', leadiq: 'green' };
 
 // Lead.source is the database source-of-truth for automatic vs. manual vs.
 // imported classification — this badge only ever reflects that stored value.

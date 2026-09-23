@@ -120,6 +120,12 @@ export const aiApi = {
   status: () => unwrap(api.get('/ai/status')),
 };
 
+export const leadiqApi = {
+  status: () => unwrap(api.get('/leadiq/status')),
+  search: (body) => unwrap(api.post('/leadiq/search', body)),
+  import: (items, revealContacts) => unwrap(api.post('/leadiq/import', { items, reveal_contacts: !!revealContacts })),
+};
+
 export const hermesApi = {
   status: () => unwrap(api.get('/hermes/status')),
   research: (companyId, body) => unwrap(api.post(`/hermes/research/${companyId}`, body || {})),

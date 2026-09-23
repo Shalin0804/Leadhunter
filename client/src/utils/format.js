@@ -125,6 +125,7 @@ export const LEAD_SOURCE_LABELS = {
   manual: 'Manual',
   automation: 'Automatic',
   imported: 'Imported',
+  leadiq: 'LeadIQ',
 };
 
 export const LEAD_QUALIFICATION_LABELS = {

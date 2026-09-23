@@ -34,7 +34,7 @@ const { getSettings } = require('./automationSettingsService');
 const LEADGEN_PROVIDER_KEY = 'leadgen'; // daily-lead-limit counter key (independent of the data-source provider)
 const MAX_LOGGED_ERRORS = 50;
 
-async function upsertBasicCompany(raw, { industry, providerKey }) {
+async function upsertBasicCompany(raw, { industry, providerKey, companySource = 'automation' }) {
   const existing = await findMatchingCompany({
     website: raw.website,
     phone: raw.phone,
@@ -53,6 +53,7 @@ async function upsertBasicCompany(raw, { industry, providerKey }) {
     if (!existing.city && raw.city) existing.city = raw.city;
     if (!existing.state && raw.state) existing.state = raw.state;
     if (!existing.registered_address && raw.registered_address) existing.registered_address = raw.registered_address;
+    if (!existing.linkedin_url && raw.linkedin_url) existing.linkedin_url = raw.linkedin_url;
     existing.normalized_domain = normalizeDomain(existing.website);
     existing.normalized_name = normalizeName(existing.company_name);
     existing.normalized_address = normalizeAddress(existing.registered_address);
@@ -68,8 +69,9 @@ async function upsertBasicCompany(raw, { industry, providerKey }) {
     state: raw.state || null,
     registered_address: raw.registered_address || null,
     website: raw.website || null,
+    linkedin_url: raw.linkedin_url || null,
     company_status: 'Active',
-    source: 'automation',
+    source: companySource,
     normalized_domain: normalizeDomain(raw.website),
     normalized_phone: normalizePhone(raw.phone),
     normalized_name: normalizeName(raw.company_name),
@@ -79,8 +81,49 @@ async function upsertBasicCompany(raw, { industry, providerKey }) {
     last_discovered_at: new Date(),
   });
 
-  if (raw.phone) await CompanyContact.create({ company_id: company.id, type: 'phone', value: raw.phone, is_primary: true });
-  if (raw.email) await CompanyContact.create({ company_id: company.id, type: 'email', value: raw.email, is_primary: true, is_public_business: true });
+  // contact_name/job_title/linkedin_url are set by providers that return a named
+  // decision-maker alongside the business (currently only LeadIQ) — every other
+  // provider omits them and behavior here is unchanged (a plain phone/email row).
+  if (raw.phone) {
+    await CompanyContact.create({
+      company_id: company.id,
+      type: 'phone',
+      value: raw.phone,
+      is_primary: true,
+      source: providerKey,
+      contact_name: raw.contact_name || null,
+      job_title: raw.job_title || null,
+    });
+  }
+  if (raw.email) {
+    await CompanyContact.create({
+      company_id: company.id,
+      type: 'email',
+      value: raw.email,
+      is_primary: true,
+      is_public_business: !raw.contact_name, // a named person's email isn't a generic role inbox
+      source: providerKey,
+      contact_name: raw.contact_name || null,
+      job_title: raw.job_title || null,
+      linkedin_url: raw.linkedin_url || null,
+    });
+  }
+  // A named decision-maker with no email/phone yet (e.g. a LeadIQ profile-search hit
+  // before its separate, credit-costing reveal step runs) still deserves a real,
+  // findable contact row — otherwise their name/title/LinkedIn is silently dropped.
+  if (!raw.phone && !raw.email && raw.contact_name && raw.linkedin_url) {
+    await CompanyContact.create({
+      company_id: company.id,
+      type: 'linkedin',
+      value: raw.linkedin_url,
+      is_primary: true,
+      is_public_business: false,
+      source: providerKey,
+      contact_name: raw.contact_name,
+      job_title: raw.job_title || null,
+      linkedin_url: raw.linkedin_url,
+    });
+  }
   if (raw.website) await CompanyWebsite.create({ company_id: company.id, url: raw.website, is_https: /^https:/i.test(raw.website) });
 
   company.has_email = !!raw.email;

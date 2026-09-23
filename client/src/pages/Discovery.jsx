@@ -11,9 +11,10 @@ import {
   FiSearch,
 } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
-import { companyApi, apolloApi } from '../services/endpoints';
+import { companyApi, apolloApi, leadiqApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import ApolloSearchModal from '../components/ApolloSearchModal';
+import LeadIQSearchModal from '../components/LeadIQSearchModal';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
 import { fmtDate, SIGNAL_SERVICE_LABELS } from '../utils/format';
@@ -36,7 +37,9 @@ export default function Discovery() {
   const [showFilters, setShowFilters] = useState(true);
   const [modal, setModal] = useState(null); // { type, company }
   const [showApollo, setShowApollo] = useState(false);
+  const [showLeadIQ, setShowLeadIQ] = useState(false);
   const { data: apolloStatus } = useApi(() => apolloApi.status(), []);
+  const { data: leadiqStatus } = useApi(() => leadiqApi.status(), []);
 
   const get = (k) => params.get(k) || '';
   const setParam = (k, v) => {
@@ -106,6 +109,13 @@ export default function Discovery() {
             title={apolloStatus?.configured ? 'Search Apollo.io for real companies' : 'Apollo not configured'}
           >
             <FiSearch /> Search Apollo
+          </button>
+          <button
+            className="btn"
+            onClick={() => (leadiqStatus?.configured ? setShowLeadIQ(true) : toast.error('LeadIQ is not configured — set LEADIQ_API_KEY on the server.'))}
+            title={leadiqStatus?.configured ? 'Search LeadIQ for real leads' : 'LeadIQ not configured'}
+          >
+            <FiSearch /> Search LeadIQ
           </button>
           <button
             className="btn"
@@ -341,6 +351,7 @@ export default function Discovery() {
         onDone={reload}
       />
       <ApolloSearchModal open={showApollo} onClose={() => setShowApollo(false)} onImported={reload} />
+      <LeadIQSearchModal open={showLeadIQ} onClose={() => setShowLeadIQ(false)} onImported={reload} />
     </div>
   );
 }
