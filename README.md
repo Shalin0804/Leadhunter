@@ -205,8 +205,8 @@ DB_USER=root
 DB_PASSWORD=your_mysql_password
 JWT_SECRET=replace-with-a-long-random-string
 JWT_EXPIRES_IN=7d
-ADMIN_EMAIL=admin@leadhunter.local
-ADMIN_PASSWORD=Admin@123456
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
 ADMIN_NAME=LeadHunter Admin
 CLIENT_ORIGIN=http://localhost:5173
 ```
