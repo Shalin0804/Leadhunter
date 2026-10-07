@@ -25,8 +25,8 @@ module.exports = {
     user: env('DB_USER', dialect === 'postgres' ? 'postgres' : 'root'),
     password: env('DB_PASSWORD', ''),
     dialect,
-    // SSL on by default for hosted Postgres; disable locally with DB_SSL=false.
-    ssl: env('DB_SSL', dialect === 'postgres' && (databaseUrl || env('DB_HOST', '') !== 'localhost') ? 'true' : 'false') === 'true',
+    // SSL on by default for any hosted DB (DATABASE_URL) and non-local Postgres; disable with DB_SSL=false.
+    ssl: env('DB_SSL', databaseUrl || (dialect === 'postgres' && env('DB_HOST', '') !== 'localhost') ? 'true' : 'false') === 'true',
   },
 
   jwt: {

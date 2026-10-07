@@ -14,6 +14,7 @@ const config = require('../config/config');
 const { sequelize } = require('../models');
 
 const FRESH = process.argv.includes('--fresh');
+const ALTER = process.argv.includes('--alter');
 const isPostgres = config.db.dialect === 'postgres';
 
 // Only self-provision the database for a local MySQL server. Hosted providers
@@ -41,9 +42,9 @@ async function countTables() {
     );
     return Number(rows[0].n);
   }
+  // DATABASE() rather than config.db.name — with DATABASE_URL the name lives in the URL.
   const [rows] = await sequelize.query(
-    'SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = :schema',
-    { replacements: { schema: config.db.name } }
+    'SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE()'
   );
   return Number(rows[0].n);
 }
@@ -79,7 +80,8 @@ async function run() {
 
   const tableCount = await countTables();
 
-  if (tableCount > 0 && !FRESH) {
+  // Postgres-only: the remap exists for Postgres enum casting and uses "quoted" identifiers.
+  if (isPostgres && tableCount > 0 && !FRESH) {
     await remapLegacyTemperatureValues();
     console.log('[migrate] legacy lead_temperature values remapped (HIGH->WARM, NOT_QUALIFIED->LOW)');
   }
@@ -90,9 +92,14 @@ async function run() {
   } else if (tableCount === 0) {
     console.log('[migrate] empty database — creating all tables');
     await sequelize.sync();
-  } else {
+  } else if (isPostgres || ALTER) {
     console.log('[migrate] existing database — applying non-destructive changes');
     await sequelize.sync({ alter: true });
+  } else {
+    // On MySQL/TiDB, repeated `alter: true` re-adds every `unique: true` index
+    // (cin, cin_2, ...) until the 64-key limit — so it is opt-in there.
+    console.log('[migrate] existing database — creating any new tables (pass --alter to change existing ones)');
+    await sequelize.sync();
   }
 
   console.log('[migrate] all tables synchronized');
