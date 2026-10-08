@@ -49,6 +49,10 @@ exports.runNow = async (req, res) => {
       })
     ).catch((e) => console.error('[automation] target run failed:', e.message));
   } else {
+    // Without this, runFullDiscovery no-ops silently and the UI still says "run started".
+    if (!settings.locations?.length || !settings.industries?.length) {
+      throw ApiError.badRequest('Add at least one target location and one target industry in Automation Settings, save, then run again');
+    }
     withRunLock('manual', () => runFullDiscovery({ triggeredBy: 'manual', triggeredByUserId: req.user.id })).catch((e) =>
       console.error('[automation] manual run failed:', e.message)
     );
