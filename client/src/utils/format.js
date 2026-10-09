@@ -126,6 +126,7 @@ export const LEAD_SOURCE_LABELS = {
   automation: 'Automatic',
   imported: 'Imported',
   leadiq: 'LeadIQ',
+  explorium: 'Explorium',
 };
 
 export const LEAD_QUALIFICATION_LABELS = {

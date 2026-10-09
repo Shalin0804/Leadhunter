@@ -17,6 +17,7 @@ import ImportDetail from './pages/ImportDetail';
 import Signals from './pages/Signals';
 import Automation from './pages/Automation';
 import AutomationRunDetail from './pages/AutomationRunDetail';
+import ExploriumLeads from './pages/ExploriumLeads';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/notes" element={<Notes />} />
+        <Route path="/explorium" element={<ExploriumLeads />} />
         <Route path="/imports" element={<Imports />} />
         <Route path="/imports/:id" element={<ImportDetail />} />
       </Route>

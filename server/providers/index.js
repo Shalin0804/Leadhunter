@@ -9,6 +9,7 @@ const GooglePlacesProvider = require('./GooglePlacesProvider');
 const YelpBusinessProvider = require('./YelpBusinessProvider');
 const HunterProvider = require('./HunterProvider');
 const LeadIQProvider = require('./LeadIQProvider');
+const ExploriumProvider = require('./ExploriumProvider');
 
 // Provider registry — add new sources here.
 const registry = {
@@ -32,6 +33,10 @@ const discoveryRegistry = {
 // credit-costing reveal) that the generic searchBusinesses() contract doesn't carry —
 // leadiqController talks to this singleton directly for that, same instance as above.
 const leadiqProvider = discoveryRegistry.leadiq;
+
+// Explorium powers its own sidebar module only — deliberately outside every registry
+// so it never joins Company Discovery or the automation pipeline.
+const exploriumProvider = new ExploriumProvider();
 
 // Separate registry for *contact enrichment* sources (domainSearch()/verifyEmail()).
 const enrichmentRegistry = {
@@ -78,6 +83,7 @@ module.exports = {
   HunterProvider,
   LeadIQProvider,
   leadiqProvider,
+  exploriumProvider,
   registry,
   discoveryRegistry,
   enrichmentRegistry,
