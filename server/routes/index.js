@@ -30,5 +30,6 @@ router.use('/dashboard', require('./dashboard.routes'));
 router.use('/hermes', require('./hermes.routes'));
 router.use('/ai', require('./ai.routes'));
 router.use('/leadiq', require('./leadiq.routes'));
+router.use('/explorium', require('./explorium.routes'));
 
 module.exports = router;

@@ -126,6 +126,14 @@ export const leadiqApi = {
   import: (items, revealContacts) => unwrap(api.post('/leadiq/import', { items, reveal_contacts: !!revealContacts })),
 };
 
+export const exploriumApi = {
+  status: () => unwrap(api.get('/explorium/status')),
+  stats: () => unwrap(api.get('/explorium/stats')),
+  search: (body) => unwrap(api.post('/explorium/search', body)),
+  // Each imported company gets a live website audit — allow far longer than the default 30s.
+  import: (items) => unwrap(api.post('/explorium/import', { items }, { timeout: 300000 })),
+};
+
 export const hermesApi = {
   status: () => unwrap(api.get('/hermes/status')),
   research: (companyId, body) => unwrap(api.post(`/hermes/research/${companyId}`, body || {})),

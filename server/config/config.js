@@ -98,6 +98,17 @@ module.exports = {
     revealTimeoutMs: parseInt(env('LEADIQ_REVEAL_TIMEOUT_MS', '60000'), 10),
   },
 
+  explorium: {
+    // Explorium AgentSource REST API (https://developers.explorium.ai/), sent as the
+    // `api_key` header. Powers the separate "Explorium Leads" module only. Leave
+    // blank to disable — the module then shows a "Not Configured" status.
+    apiKey: env('EXPLORIUM_API_KEY', ''),
+    baseUrl: env('EXPLORIUM_BASE_URL', 'https://api.explorium.ai/v1'),
+    timeoutMs: parseInt(env('EXPLORIUM_TIMEOUT_MS', '20000'), 10),
+    // Upper bound on how deep one search can be paged (Explorium's own cap is 60000).
+    maxResults: Math.min(parseInt(env('EXPLORIUM_MAX_RESULTS', '1000'), 10) || 1000, 60000),
+  },
+
   hermes: {
     // Base URL of your locally-running (or hosted) Hermes Agent gateway, e.g.
     // http://127.0.0.1:PORT — see server/.env.example for how to get a fixed

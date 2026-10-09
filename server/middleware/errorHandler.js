@@ -10,7 +10,7 @@ const notFoundHandler = (req, res) => {
 const errorHandler = (err, req, res, next) => {
   let status = err.statusCode || 500;
   let message = err.message || 'Internal server error';
-  let details;
+  let details = err.isApiError ? err.details : undefined;
 
   if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
     status = 400;
