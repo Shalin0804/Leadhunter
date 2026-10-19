@@ -2,6 +2,8 @@ const app = require('./app');
 const config = require('./config/config');
 const { sequelize } = require('./models');
 const { reschedule } = require('./jobs/automationScheduler');
+const { logConfigStatus } = require('./services/alertService');
+const { reportStartup, installShutdownHook } = require('./services/monitoringService');
 
 async function start() {
   try {
@@ -29,6 +31,10 @@ async function start() {
     // eslint-disable-next-line no-console
     console.error('[automation] scheduler init failed:', err.message);
   }
+
+  logConfigStatus();
+  installShutdownHook();
+  reportStartup().catch((err) => console.error('[monitoring] startup report failed:', err.message));
 }
 
 start();

@@ -3,7 +3,9 @@ const { getSettings, updateSettings } = require('../services/automationSettingsS
 const { runFullDiscovery, runForTarget } = require('../services/discoveryOrchestrator');
 const { reschedule, isRunning, withRunLock } = require('../jobs/automationScheduler');
 const { history } = require('../services/apiUsageService');
-const { SearchRun, LeadSource, Lead, Company } = require('../models');
+const { SearchRun, LeadSource, Lead, Company, sequelize } = require('../models');
+const monitoring = require('../services/monitoringService');
+const alerts = require('../services/alertService');
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
 const { listDiscoveryProviders, listEnrichmentProviders } = require('../providers');
@@ -64,12 +66,16 @@ exports.runNow = async (req, res) => {
 // External-cron entry point — no user session, just a shared secret. Safe to
 // call repeatedly/overlapping: withRunLock rejects a second run while one is
 // in progress, same as the manual and in-process-scheduled triggers.
-exports.runScheduled = async (req, res) => {
+function checkTriggerSecret(req) {
   if (!config.automation.triggerSecret) {
     throw ApiError.badRequest('AUTOMATION_TRIGGER_SECRET is not configured on the server');
   }
   const provided = req.headers['x-automation-secret'] || req.query.secret;
   if (provided !== config.automation.triggerSecret) throw ApiError.unauthorized('Invalid automation trigger secret');
+}
+
+exports.runScheduled = async (req, res) => {
+  checkTriggerSecret(req);
   if (isRunning()) return ok(res, { message: 'A run is already in progress — skipped.' });
 
   withRunLock('external', () => runFullDiscovery({ triggeredBy: 'external' })).catch((e) =>
@@ -105,3 +111,32 @@ exports.getRun = async (req, res) => {
 exports.apiUsage = async (req, res) => ok(res, { usage: await history(30) });
 
 exports.isRunning = async (req, res) => ok(res, { running: isRunning() });
+
+exports.ready = async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    return res.json({ status: 'ready', timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('[health] readiness check failed:', err.message);
+    return res.status(503).json({ status: 'unavailable', timestamp: new Date().toISOString() });
+  }
+};
+
+// External-cron heartbeat: 200 when healthy/disabled/running, 503 when overdue so the
+// cron service's own failure email fires too (a second channel if SMTP is broken).
+exports.heartbeat = async (req, res) => {
+  checkTriggerSecret(req);
+  const status = await monitoring.checkAutomationHealth({ isRunning: isRunning() });
+  return res.status(status.status === 'overdue' ? 503 : 200).json({ success: status.status !== 'overdue', data: status });
+};
+
+exports.monitorStatus = async (req, res) =>
+  ok(res, { automation: await monitoring.automationStatus({ isRunning: isRunning() }), alerts: { configured: !alerts.configProblem(), problem: alerts.configProblem() } });
+
+exports.testAlert = async (req, res) => {
+  const problem = alerts.configProblem();
+  if (problem) throw ApiError.badRequest(`Email alerts are not configured: ${problem}`);
+  const sent = await alerts.send('test', { 'Requested by': req.user.email });
+  if (!sent) throw ApiError.badRequest('Test email failed — check the server logs for the SMTP error');
+  return ok(res, { message: `Test email sent to ${config.alerts.to}` });
+};

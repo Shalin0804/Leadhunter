@@ -7,6 +7,7 @@ const ApolloCompanyProvider = require('./ApolloCompanyProvider');
 const OsmBusinessProvider = require('./OsmBusinessProvider');
 const GooglePlacesProvider = require('./GooglePlacesProvider');
 const YelpBusinessProvider = require('./YelpBusinessProvider');
+const SerperPlacesProvider = require('./SerperPlacesProvider');
 const HunterProvider = require('./HunterProvider');
 const LeadIQProvider = require('./LeadIQProvider');
 const ExploriumProvider = require('./ExploriumProvider');
@@ -26,6 +27,7 @@ const discoveryRegistry = {
   osm: new OsmBusinessProvider(),
   google_places: new GooglePlacesProvider(),
   yelp: new YelpBusinessProvider(),
+  serper: new SerperPlacesProvider(),
   leadiq: new LeadIQProvider(),
 };
 
@@ -80,6 +82,7 @@ module.exports = {
   OsmBusinessProvider,
   GooglePlacesProvider,
   YelpBusinessProvider,
+  SerperPlacesProvider,
   HunterProvider,
   LeadIQProvider,
   leadiqProvider,

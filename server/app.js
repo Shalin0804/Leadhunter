@@ -29,6 +29,9 @@ app.get('/', (req, res) =>
   res.json({ success: true, data: { name: 'LeadHunter CRM API', version: '1.0.0', health: '/api/health' } })
 );
 
+// Liveness probe for uptime monitors: proves the Express process answers. No DB, no secrets.
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'LeadHunter Backend', timestamp: new Date().toISOString() }));
+
 app.use('/api', routes);
 
 app.use(notFoundHandler);

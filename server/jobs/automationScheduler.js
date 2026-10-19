@@ -13,6 +13,7 @@
 const cron = require('node-cron');
 const { getSettings } = require('../services/automationSettingsService');
 const { runFullDiscovery } = require('../services/discoveryOrchestrator');
+const { recordRunOutcome } = require('../services/monitoringService');
 
 const CRON_EXPRESSIONS = {
   daily_9am: '0 9 * * *',
@@ -47,17 +48,20 @@ async function withRunLock(triggeredBy, task) {
     return { skipped: true, message: 'A run is already in progress — skipped.' };
   }
   running = true;
+  let result;
   try {
     console.log(`[automation] starting ${triggeredBy} discovery run`);
-    const result = await task();
+    result = await task();
     console.log(`[automation] ${triggeredBy} run complete`);
-    return result;
   } catch (err) {
     console.error(`[automation] ${triggeredBy} run failed:`, err.message);
-    return { error: err.message };
+    result = { error: err.message };
   } finally {
     running = false;
   }
+  // Fire-and-forget: alert email delivery must never delay or fail the run itself.
+  recordRunOutcome(triggeredBy, result).catch((e) => console.error('[automation] outcome alert failed:', e.message));
+  return result;
 }
 
 async function fire(triggeredBy = 'scheduled') {

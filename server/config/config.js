@@ -57,6 +57,10 @@ module.exports = {
     apiKey: env('YELP_API_KEY', ''),
   },
 
+  serper: {
+    apiKey: env('SERPER_API_KEY', ''),
+  },
+
   enrichment: {
     minScore: parseInt(env('ENRICHMENT_MIN_SCORE', '50'), 10),
     refreshDays: parseInt(env('ENRICHMENT_REFRESH_DAYS', '30'), 10),
@@ -65,6 +69,23 @@ module.exports = {
   automation: {
     // Shared secret an external cron service must send to trigger a scheduled run.
     triggerSecret: env('AUTOMATION_TRIGGER_SECRET', ''),
+    // Max gap between successful runs before /api/automation/heartbeat reports "overdue".
+    staleThresholdMinutes: parseInt(env('AUTOMATION_STALE_THRESHOLD_MINUTES', '1500'), 10),
+  },
+
+  // Email alerts (SMTP). Off unless ALERT_EMAIL_ENABLED=true and every field below is set.
+  alerts: {
+    enabled: env('ALERT_EMAIL_ENABLED', 'false') === 'true',
+    to: env('ALERT_EMAIL_TO', ''),
+    from: env('ALERT_EMAIL_FROM', ''),
+    cooldownMinutes: parseInt(env('ALERT_COOLDOWN_MINUTES', '60'), 10),
+    smtp: {
+      host: env('SMTP_HOST', ''),
+      port: parseInt(env('SMTP_PORT', '587'), 10),
+      secure: env('SMTP_SECURE', 'false') === 'true',
+      user: env('SMTP_USER', ''),
+      pass: env('SMTP_PASS', ''),
+    },
   },
 
   nvidia: {
