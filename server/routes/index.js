@@ -4,12 +4,16 @@ const automationController = require('../controllers/automationController');
 const { asyncHandler } = require('../utils/http');
 
 router.get('/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
+// Readiness: also checks the database. 503 with no internals on failure.
+router.get('/ready', asyncHandler(automationController.ready));
 
 router.use('/auth', require('./auth.routes'));
 
 // Secret-protected external-cron entry point — intentionally NOT behind user auth,
 // since a cron service (cron-job.org, GitHub Actions) has no user session.
 router.post('/automation/run-scheduled', asyncHandler(automationController.runScheduled));
+// Same secret. An external cron hits this to detect overdue automation (an asleep process can't).
+router.get('/automation/heartbeat', asyncHandler(automationController.heartbeat));
 
 // Everything below requires a valid JWT.
 router.use(authenticate);

@@ -49,6 +49,30 @@ services:
       # Optional — additional business-discovery source. Leave unset; OSM keeps running on its own.
       - key: YELP_API_KEY
         sync: false
+      # Optional — Serper.dev Google Places discovery source.
+      - key: SERPER_API_KEY
+        sync: false
+      # Email alerts (see DEPLOY.md section 6). Off until ALERT_EMAIL_ENABLED=true.
+      - key: ALERT_EMAIL_ENABLED
+        value: "false"
+      - key: ALERT_EMAIL_TO
+        sync: false
+      - key: ALERT_EMAIL_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: AUTOMATION_STALE_THRESHOLD_MINUTES
+        value: "1500"
+      - key: ALERT_COOLDOWN_MINUTES
+        value: "60"
       # Score (0-100) at/above which a lead becomes eligible for contact enrichment.
       - key: ENRICHMENT_MIN_SCORE
         value: "50"

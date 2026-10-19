@@ -12,6 +12,7 @@
     "unseed": "node seed/seed.js --wipe-only",
     "setup": "node seed/migrate.js && node seed/seed.js",
     "test": "node seed/smoke-test.js",
+    "test:monitoring": "node seed/monitoring-check.js",
     "agent:ingest": "node scripts/agentIngest.js"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "multer": "^2.3.0",
     "mysql2": "^3.11.3",
     "node-cron": "^3.0.3",
+    "nodemailer": "^6.10.1",
     "openai": "^4.104.0",
     "pg": "^8.13.1",
     "pg-hstore": "^2.3.4",

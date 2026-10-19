@@ -137,6 +137,47 @@ kicks off the run.
 If you upgrade to an always-on paid Render instance, the in-process scheduler
 alone becomes reliable and the external ping is just a harmless backup.
 
+## 6. Downtime and automation email alerts
+
+Three independent pieces — set up all three:
+
+| What you get emailed about | Who sends it | Works while backend is down/asleep? |
+|---|---|---|
+| Backend unreachable / back up | **UptimeRobot** (external) | yes |
+| Backend started, or recovered after an unclean stop | backend (SMTP) | n/a — sent after boot |
+| Automation run failed / recovered | backend (SMTP) | no — sent when the run ends |
+| Automation overdue | backend, driven by **cron-job.org** heartbeat | yes — the cron call wakes it |
+
+**a) SMTP (backend emails).** In Render → Environment set `ALERT_EMAIL_ENABLED=true`,
+`ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
+`SMTP_USER`, `SMTP_PASS`. For Gmail use `smtp.gmail.com`, `465`, `true`, and a
+Google **App Password** (needs 2-Step Verification). Redeploy, then check the log
+line `[alerts] email alerts enabled`. Send a test as an admin:
+`POST /api/automation/alerts/test` (logged-in JWT). `GET /api/automation/monitor`
+shows the current automation status and whether alerts are configured.
+
+**b) UptimeRobot (backend down).** uptimerobot.com → free account → New monitor:
+- Type: HTTP(s); URL: `https://<your-render-app>.onrender.com/health`
+- Interval: 5 minutes; Alert contact: your email (verify it).
+UptimeRobot emails "Down" and "Up" itself.
+
+Note: a 5-minute probe also keeps a free instance from idling to sleep. One
+always-awake free service uses ~744 of Render's 750 free instance-hours/month —
+fine for this one service, but a second free service would exhaust the quota.
+Choose a longer interval (e.g. 30 min) if you'd rather let it sleep; the first
+probe after sleep may then time out during cold start (~30-60s) and report a
+short false "Down".
+
+**c) cron-job.org heartbeat (automation overdue).** Add a second job next to the
+run-scheduled one from section 5:
+- URL: `https://<your-render-app>.onrender.com/api/automation/heartbeat`
+- Method: `GET`; Header: `X-Automation-Secret: <AUTOMATION_TRIGGER_SECRET>`
+- Schedule: every hour; enable "Notify me when execution fails".
+It returns 200 for `ok` / `running` / `disabled` and **503 for `overdue`**, so
+cron-job.org also emails you even if SMTP is broken. Overdue = automation enabled
+and no successful run for `AUTOMATION_STALE_THRESHOLD_MINUTES` (default 25h).
+Turning automation off in settings stops overdue alerts.
+
 ## Environment variable reference
 
 | Var | Where | Notes |
@@ -154,6 +195,12 @@ alone becomes reliable and the external ping is just a harmless backup.
 | `YELP_API_KEY` | Render | optional — additional business-discovery source (Yelp Fusion API); OSM keeps running if unset |
 | `ENRICHMENT_MIN_SCORE` | Render | default `50` — lead score threshold for enrichment eligibility (see enrichmentService.isEligibleForEnrichment) |
 | `ENRICHMENT_REFRESH_DAYS` | Render | default `30` — days before a company already enriched can be re-enriched |
+| `SERPER_API_KEY` | Render | optional — Serper.dev Google Places discovery source |
+| `ALERT_EMAIL_ENABLED` | Render | `true` to send alert emails (section 6); default off |
+| `ALERT_EMAIL_TO` / `ALERT_EMAIL_FROM` | Render | recipient / sender address |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Render | SMTP credentials (Gmail: App Password) |
+| `ALERT_COOLDOWN_MINUTES` | Render | default `60` — min gap between two emails of the same type |
+| `AUTOMATION_STALE_THRESHOLD_MINUTES` | Render | default `1500` — heartbeat reports overdue after this long without a successful run |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data
