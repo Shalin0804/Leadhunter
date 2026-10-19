@@ -13,6 +13,7 @@ const PROVIDER_LABELS = {
   osm: 'OpenStreetMap',
   google_places: 'Google Places',
   yelp: 'Yelp',
+  serper: 'Serper',
   apollo: 'Apollo',
 };
 

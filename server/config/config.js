@@ -57,6 +57,10 @@ module.exports = {
     apiKey: env('YELP_API_KEY', ''),
   },
 
+  serper: {
+    apiKey: env('SERPER_API_KEY', ''),
+  },
+
   enrichment: {
     minScore: parseInt(env('ENRICHMENT_MIN_SCORE', '50'), 10),
     refreshDays: parseInt(env('ENRICHMENT_REFRESH_DAYS', '30'), 10),

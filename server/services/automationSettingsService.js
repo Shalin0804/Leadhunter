@@ -21,7 +21,7 @@ const DEFAULTS = {
   // so this stays true by default without spending anything on a fresh install.
   autoAIQualification: true,
   provider: 'osm', // osm | google_places — legacy single-provider field, kept for back-compat
-  discoveryProviders: ['osm'], // osm | google_places | yelp — a target is run against every listed provider whose isConfigured() is true
+  discoveryProviders: ['osm'], // osm | google_places | yelp | serper — a target is run against every listed provider whose isConfigured() is true
 
   // Contact enrichment (Hunter) — gated by isEligibleForEnrichment(), not just a raw
   // score threshold (see enrichmentService). ENRICHMENT_MIN_SCORE/ENRICHMENT_REFRESH_DAYS
