@@ -139,9 +139,27 @@ exports.exportCsv = async (req, res) => {
     limit: 5000,
   });
 
+  // One batch query for every row's phones/emails (no N+1).
+  const contacts = await CompanyContact.findAll({
+    where: { company_id: [...new Set(rows.map((l) => l.company_id))], type: ['phone', 'email'] },
+    attributes: ['company_id', 'type', 'value'],
+    order: [['is_primary', 'DESC'], ['id', 'ASC']],
+    raw: true,
+  });
+  const byKey = new Map();
+  for (const c of contacts) {
+    const k = `${c.company_id}:${c.type}`;
+    if (!byKey.has(k)) byKey.set(k, new Set());
+    byKey.get(k).add(c.value);
+  }
+  const contactsOf = (companyId, type) => [...(byKey.get(`${companyId}:${type}`) || [])].join('; ');
+
   const flat = rows.map((l) => ({
     lead_id: l.id,
     company: l.company?.company_name || '',
+    phone: contactsOf(l.company_id, 'phone'),
+    email: contactsOf(l.company_id, 'email'),
+    website: l.company?.website || '',
     cin: l.company?.cin || '',
     industry: l.company?.industry || '',
     state: l.company?.state || '',
