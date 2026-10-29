@@ -48,7 +48,11 @@ function buildLeadWhere(q) {
 
   const created = {};
   if (q.created_from) created[Op.gte] = new Date(q.created_from);
-  if (q.created_to) created[Op.lte] = new Date(q.created_to);
+  // A plain date ("2026-10-29") means the whole day, so stop before the next midnight.
+  if (q.created_to) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(q.created_to)) created[Op.lt] = new Date(new Date(q.created_to).getTime() + 86400000);
+    else created[Op.lte] = new Date(q.created_to);
+  }
   if (Object.getOwnPropertySymbols(created).length) where.created_at = created;
 
   const follow = {};
@@ -129,10 +133,11 @@ exports.list = async (req, res) => {
 
 exports.exportCsv = async (req, res) => {
   const where = buildLeadWhere(req.query);
+  const cw = companyWhere(req.query);
   const rows = await Lead.findAll({
     where,
     include: [
-      { model: Company, as: 'company', attributes: companyAttrs },
+      { model: Company, as: 'company', attributes: companyAttrs, ...(cw ? { where: cw, required: true } : {}) },
       { model: User, as: 'assignedUser', attributes: ['id', 'name', 'email'] },
     ],
     order: [['lead_score', 'DESC']],

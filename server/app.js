@@ -20,7 +20,8 @@ const corsOrigin = (origin, cb) => {
 };
 
 app.use(helmet());
-app.use(cors({ origin: corsOrigin, credentials: true }));
+// Expose Content-Disposition so cross-origin downloads keep the server's filename.
+app.use(cors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Content-Disposition'] }));
 app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
