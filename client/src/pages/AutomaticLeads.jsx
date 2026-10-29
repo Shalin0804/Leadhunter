@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { FiDownload, FiExternalLink, FiZap } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
-import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, SourceBadge } from '../components/ui';
+import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, SourceBadge, Modal } from '../components/ui';
+import { PRESETS, presetRange } from '../components/ExportLeadsModal';
 import { fmtDate, fmtDateTime, STATUS_LABELS } from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
@@ -25,6 +26,7 @@ const providerLabel = (key) => PROVIDER_LABELS[key] || (key ? key.replace(/_/g, 
 export default function AutomaticLeads() {
   const [params, setParams] = useSearchParams();
   const [page, setPage] = useState(1);
+  const [csvOpen, setCsvOpen] = useState(false);
   const toast = useToast();
 
   const get = (k) => params.get(k) || '';
@@ -72,11 +74,13 @@ export default function AutomaticLeads() {
           <Link className="btn" to="/automation">
             <FiZap /> Automation settings
           </Link>
-          <button className="btn" onClick={() => leadApi.exportCsv(query).catch((e) => toast.error(e.message))}>
+          <button className="btn" onClick={() => setCsvOpen(true)}>
             <FiDownload /> Export CSV
           </button>
         </div>
       </div>
+
+      <ExportCsvModal open={csvOpen} onClose={() => setCsvOpen(false)} query={query} toast={toast} />
 
       <Card className="mb-3">
         <div className="filters">
@@ -207,5 +211,90 @@ export default function AutomaticLeads() {
         )}
       </Card>
     </div>
+  );
+}
+
+// Export CSV pop-up: pick the discovery date range; the page's other filters
+// (search, stage, industry, city, min score) are applied as well.
+function ExportCsvModal({ open, onClose, query, toast }) {
+  const [preset, setPreset] = useState('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Start from the page's own date filter each time it opens.
+  useEffect(() => {
+    if (!open) return;
+    setFrom(query.created_from || '');
+    setTo(query.created_to || '');
+    setPreset(query.created_from || query.created_to ? 'custom' : 'all');
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (p) => {
+    setPreset(p);
+    if (p === 'custom') return;
+    const r = presetRange(p);
+    setFrom(r ? r[0] : '');
+    setTo(r ? r[1] : '');
+  };
+
+  const invalid = from && to && from > to;
+  const others = [
+    query.search && `Search: ${query.search}`,
+    query.status && `Stage: ${STATUS_LABELS[query.status] || query.status}`,
+    query.industry && `Industry: ${query.industry}`,
+    query.city && `City: ${query.city}`,
+    query.min_score && `Min score: ${query.min_score}`,
+  ].filter(Boolean);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { page, limit, ...rest } = query; // eslint-disable-line no-unused-vars
+      await leadApi.exportCsv({ ...rest, created_from: from, created_to: to });
+      toast.success('CSV downloaded');
+      onClose();
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const footer = (
+    <>
+      <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+      <button className="btn btn-primary" onClick={run} disabled={busy || invalid}>
+        <FiDownload /> {busy ? 'Exporting…' : 'Export CSV'}
+      </button>
+    </>
+  );
+
+  return (
+    <Modal open={open} onClose={busy ? undefined : onClose} title="Export Automatic Leads (CSV)" footer={footer}>
+      <div className="field">
+        <label>Discovered date</label>
+        <div className="chip-row">
+          {PRESETS.map(([v, l]) => (
+            <button type="button" key={v} className={`chip chip-sm ${preset === v ? 'active' : ''}`} aria-pressed={preset === v} onClick={() => pick(v)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="filters mt-2">
+        <div className="field">
+          <label htmlFor="csv-from">From</label>
+          <input id="csv-from" className="input" type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); setPreset('custom'); }} />
+        </div>
+        <div className="field">
+          <label htmlFor="csv-to">To</label>
+          <input id="csv-to" className="input" type="date" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); setPreset('custom'); }} />
+        </div>
+      </div>
+      {invalid && <p className="text-sm" style={{ color: 'var(--danger)' }}>"From" must be on or before "To".</p>}
+      <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+        {from || to ? `Leads discovered ${from || 'any time'} to ${to || 'today'}` : 'All dates'}
+        {others.length ? ` · also filtered by ${others.join(', ')}` : ''}. Includes phone, email and website (max 5,000 rows).
+      </p>
+    </Modal>
   );
 }

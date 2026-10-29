@@ -6,7 +6,7 @@ import { useApi, useDebounced } from '../hooks/useApi';
 import { useToast } from '../context/ToastContext';
 import { titleCase, fmtDateTime, fmtNumber, STATUS_LABELS, CONTACT_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../utils/format';
 
-const PRESETS = [
+export const PRESETS = [
   ['all', 'All Time'],
   ['today', 'Today'],
   ['yesterday', 'Yesterday'],
@@ -22,7 +22,7 @@ const EMPTY_FILTERS = {};
 
 // Calendar dates in the browser's own timezone; the server converts them to UTC with the same timezone.
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-function presetRange(preset) {
+export function presetRange(preset) {
   const t = new Date();
   const shift = (n) => ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() + n));
   switch (preset) {
