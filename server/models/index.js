@@ -23,6 +23,10 @@ const DetectedSignal = require('./DetectedSignal')(sequelize);
 const HermesResearchRun = require('./HermesResearchRun')(sequelize);
 const HermesResearchEvidence = require('./HermesResearchEvidence')(sequelize);
 const LeadExport = require('./LeadExport')(sequelize);
+const AuditLog = require('./AuditLog')(sequelize);
+const LeadAssignment = require('./LeadAssignment')(sequelize);
+const Location = require('./Location')(sequelize);
+const LocationImportJob = require('./LocationImportJob')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -112,6 +116,25 @@ HermesResearchEvidence.belongsTo(HermesResearchRun, { as: 'researchRun', foreign
 Company.hasMany(HermesResearchEvidence, { as: 'hermesEvidence', foreignKey: 'company_id', onDelete: 'CASCADE' });
 HermesResearchEvidence.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
 
+// Team hierarchy
+User.belongsTo(User, { as: 'manager', foreignKey: 'manager_id', constraints: false });
+User.hasMany(User, { as: 'reports', foreignKey: 'manager_id', constraints: false });
+
+// Audit trail + assignment history (no FK constraints: audit rows must outlive deleted leads/users)
+AuditLog.belongsTo(User, { as: 'actor', foreignKey: 'actor_user_id', constraints: false });
+AuditLog.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+AuditLog.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+Lead.hasMany(LeadAssignment, { as: 'assignments', foreignKey: 'lead_id', constraints: false });
+LeadAssignment.belongsTo(User, { as: 'previousUser', foreignKey: 'previous_user_id', constraints: false });
+LeadAssignment.belongsTo(User, { as: 'newUser', foreignKey: 'new_user_id', constraints: false });
+LeadAssignment.belongsTo(User, { as: 'assignedBy', foreignKey: 'assigned_by_user_id', constraints: false });
+
+// Geographic locations (separate from companies; no FK to keep imports independent)
+Location.belongsTo(Location, { as: 'parent', foreignKey: 'parent_id', constraints: false });
+Location.hasMany(Location, { as: 'children', foreignKey: 'parent_id', constraints: false });
+Location.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id', constraints: false });
+LocationImportJob.belongsTo(User, { as: 'startedBy', foreignKey: 'started_by_user_id', constraints: false });
+
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
@@ -147,6 +170,10 @@ const db = {
   HermesResearchRun,
   HermesResearchEvidence,
   LeadExport,
+  AuditLog,
+  LeadAssignment,
+  Location,
+  LocationImportJob,
 };
 
 module.exports = db;

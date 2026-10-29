@@ -32,6 +32,14 @@ async function start() {
     console.error('[automation] scheduler init failed:', err.message);
   }
 
+  // Audit-log retention (AUDIT_RETENTION_DAYS); a no-op when unset.
+  const purge = () => require('./services/auditService').purgeExpired().catch((err) => console.error('[audit] retention purge failed:', err.message));
+  purge();
+  setInterval(purge, 24 * 3600 * 1000).unref();
+
+  // Resume geographic imports interrupted by a restart/sleep (checkpointed, idempotent).
+  require('./services/locationImportService').resumeStaleJobs().catch((err) => console.error('[locations] resume failed:', err.message));
+
   logConfigStatus();
   installShutdownHook();
   reportStartup().catch((err) => console.error('[monitoring] startup report failed:', err.message));

@@ -17,6 +17,8 @@ import {
 import { useApi } from '../hooks/useApi';
 import { companyApi, apolloApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, DemoBadge } from '../components/ui';
 import { ConvertToLeadModal, AddNoteModal, AddFollowUpModal } from '../components/actionModals';
 import {
@@ -44,7 +46,8 @@ export default function CompanyProfile() {
   const [tab, setTab] = useState('overview');
   const [enriching, setEnriching] = useState(false);
   const { data, loading, error, reload } = useApi(() => companyApi.get(id), [id]);
-  const { data: apolloStatus } = useApi(() => apolloApi.status(), []);
+  const { can } = useAuth();
+  const { data: apolloStatus } = useApi(() => (can('discovery.use') ? apolloApi.status() : null), []);
 
   if (loading) return <Loader label="Loading company…" />;
   if (error)
@@ -105,9 +108,11 @@ export default function CompanyProfile() {
           </p>
         </div>
         <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-          <button className="btn" onClick={rescore}>
-            <FiRefreshCw /> Rescore
-          </button>
+          {can('discovery.use') && (
+            <button className="btn" onClick={rescore}>
+              <FiRefreshCw /> Rescore
+            </button>
+          )}
           {apolloStatus?.configured && (
             <button className="btn" onClick={enrichFromApollo} disabled={enriching} title="Fill phone/industry/size from Apollo.io (1 credit)">
               <FiZap /> {enriching ? 'Enriching…' : 'Enrich from Apollo'}
@@ -123,7 +128,7 @@ export default function CompanyProfile() {
             <Link className="btn btn-primary" to={`/leads/${lead.id}`}>
               Open lead
             </Link>
-          ) : (
+          ) : can('leads.create') && (
             <button className="btn btn-primary" onClick={() => setModal({ type: 'convert' })}>
               <FiUserPlus /> Convert to lead
             </button>
@@ -192,10 +197,10 @@ export default function CompanyProfile() {
                   {website ? <span className="badge gray">{titleCase(website.health)}</span> : '—'}
                 </Row>
                 <Row label="Business email">
-                  {emails.length ? emails.map((e) => <div key={e.id}><FiMail style={{ verticalAlign: '-2px' }} /> {e.value}</div>) : <span className="badge warm">None</span>}
+                  {emails.length ? emails.map((e) => <div key={e.id}><FiMail style={{ verticalAlign: '-2px' }} /> <ContactValue contact={e} leadId={lead?.id} /></div>) : <span className="badge warm">None</span>}
                 </Row>
                 <Row label="Phone">
-                  {phones.length ? phones.map((p) => <div key={p.id}><FiPhone style={{ verticalAlign: '-2px' }} /> {p.value}</div>) : <span className="badge warm">None</span>}
+                  {phones.length ? phones.map((p) => <div key={p.id}><FiPhone style={{ verticalAlign: '-2px' }} /> <ContactValue contact={p} leadId={lead?.id} /></div>) : <span className="badge warm">None</span>}
                 </Row>
                 <Row label="Social profiles">
                   {company.linkedin_url && (

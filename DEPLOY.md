@@ -178,6 +178,36 @@ cron-job.org also emails you even if SMTP is broken. Overdue = automation enable
 and no successful run for `AUTOMATION_STALE_THRESHOLD_MINUTES` (default 25h).
 Turning automation off in settings stops overdue alerts.
 
+## 7. Employees, roles and the audit trail
+
+There is **no public sign-up**. After the first deploy with this release:
+
+1. Existing users keep their role (`admin` = Main Admin, `agent` = BDE). Nobody is promoted.
+2. If you need a (new) Main Admin, run once from Render → Shell:
+   `npm run create-admin -- --email you@company.com --name "Your Name"` — it prints a one-time set-password link (24h).
+3. Invite employees from **Team → Team Management**. The invite link is emailed when SMTP (section 6) is configured; otherwise copy it from the dialog. Links are single-use; only their hash is stored.
+4. Assign leads in **Team → Lead Assignment**. BDEs and Viewers see only leads assigned to them; managers see their own and their team's (set an employee's *Manager* in Team Management). Leads the automation creates stay unassigned until you assign them.
+5. Contact values are masked for every role except Main Admin; employees click **Reveal**, and each reveal is logged (field names only, never the value).
+
+Tracking starts at the first event after deploy — the Activity Log states that date and never back-fills history.
+On Postgres the migration installs a trigger that makes `audit_logs` append-only. Optional hardening for Supabase:
+`npm run migrate -- --enable-rls` enables Row Level Security on every `public` table with no policies, which closes
+Supabase's auto-generated REST API to the anon/authenticated keys. The API is unaffected only while it connects as the
+table owner (the default `postgres` user) — check that before enabling.
+
+## 8. Geographic locations and location-based discovery
+
+**Location Management** (Main Admin) → pick a country → **Discover locations**. The server downloads GeoNames
+(`countryInfo.txt`, `admin1CodesASCII.txt`, `cities1000.zip`, CC BY 4.0 — attribution required) and imports
+country → states → cities/towns (population ≥ 1,000) → neighbourhoods where GeoNames has them. Villages and many small
+areas are not covered. The import runs in the background, checkpoints every batch, resumes automatically after a
+restart (or click **Resume**), and never duplicates rows. Deactivate any location to hide it (and optionally its
+children) from employees.
+
+**Lead Discovery** (Main Admin and Managers by default) → choose an approved location and up to 5 business
+categories → the existing discovery providers, scoring, dedup and enrichment run as usual. A manager's run assigns the
+new leads to them. Business categories are edited via `PUT /api/lead-discovery/categories` (Main Admin).
+
 ## Environment variable reference
 
 | Var | Where | Notes |
@@ -201,6 +231,12 @@ Turning automation off in settings stops overdue alerts.
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Render | SMTP credentials (Gmail: App Password) |
 | `ALERT_COOLDOWN_MINUTES` | Render | default `60` — min gap between two emails of the same type |
 | `AUTOMATION_STALE_THRESHOLD_MINUTES` | Render | default `1500` — heartbeat reports overdue after this long without a successful run |
+| `APP_URL` | Render | optional — frontend URL used in invite/reset links (defaults to the first `CLIENT_ORIGIN`) |
+| `AUDIT_RETENTION_DAYS` | Render | optional — delete audit rows older than this (unset = keep forever) |
+| `CONTACT_REVEAL_LIMIT_PER_HOUR` | Render | default `120` — per-employee contact reveals per hour |
+| `DISPLAY_TIMEZONE` | Render | default `Asia/Kolkata` — timezone for activity-log dates |
+| `GEONAMES_DATASET` | Render | default `cities1000` — `cities500` / `cities5000` / `cities15000` change the population cut-off |
+| `LOCATION_IMPORT_BATCH` | Render | default `500` — rows per checkpointed batch |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data

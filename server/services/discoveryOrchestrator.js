@@ -19,7 +19,7 @@
  * runs for companies that pass isEligibleForEnrichment(), capped per run.
  */
 
-const { Company, CompanyContact, CompanyWebsite, Lead, LeadSource, SearchRun, Activity } = require('../models');
+const { Company, CompanyContact, CompanyWebsite, Lead, LeadSource, SearchRun, Activity, LeadAssignment } = require('../models');
 const { getDiscoveryProvider } = require('../providers');
 const { findMatchingCompany, normalizeDomain, normalizePhone, normalizeName, normalizeAddress } = require('./dedupeService');
 const { auditWebsite } = require('./websiteAuditService');
@@ -200,7 +200,9 @@ async function discoverFromAllProviders({ location, industry, providers, limit, 
  * configured discovery provider. Creates its own SearchRun row. Never
  * throws — failures are recorded on the run itself.
  */
-async function runForTarget({ location, industry, providerKey, discoveryProviders, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings }) {
+// assignToUserId: owner for leads this run creates (set for employee-initiated location runs so the
+// employee can see them); omitted by automation, which keeps creating unassigned leads as before.
+async function runForTarget({ location, industry, providerKey, discoveryProviders, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings, assignToUserId }) {
   const providers = discoveryProviders?.length ? discoveryProviders : [providerKey || settings?.provider || 'osm'];
 
   const run = await SearchRun.create({
@@ -383,10 +385,14 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
             ai_evidence: qualification?.evidence,
             ai_sales_angle: qualification?.salesAngle,
             source: 'automation',
+            assigned_user_id: assignToUserId || null,
           },
         });
 
         if (leadCreated) {
+          if (assignToUserId) {
+            await LeadAssignment.create({ lead_id: lead.id, previous_user_id: null, new_user_id: assignToUserId, assigned_by_user_id: triggeredByUserId || null, reason: `Found by your discovery run #${run.id}` });
+          }
           await apiUsage.recordUsage(LEADGEN_PROVIDER_KEY, { requests: 0, leadsCreated: 1 });
           await Activity.create({
             company_id: company.id,

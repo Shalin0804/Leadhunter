@@ -2,10 +2,16 @@ const router = require('express').Router();
 const ctrl = require('../controllers/companyController');
 const { validate } = require('../middleware/validate');
 const { asyncHandler } = require('../utils/http');
+const { requirePermission } = require('../middleware/auth');
 
-router.get('/', asyncHandler(ctrl.list));
-router.get('/export', asyncHandler(ctrl.exportCsv));
-router.get('/:id', asyncHandler(ctrl.get));
+// A single company profile is readable by anyone who can see one of its leads
+// (checked in the controller); everything else is discovery tooling.
+const discovery = requirePermission('discovery.use');
+
+router.get('/', discovery, asyncHandler(ctrl.list));
+router.get('/export', discovery, requirePermission('leads.export'), asyncHandler(ctrl.exportCsv));
+router.get('/:id', requirePermission('leads.view'), asyncHandler(ctrl.get));
+router.use(discovery);
 router.post(
   '/',
   validate({ company_name: { required: true, minLength: 2, maxLength: 255 } }),

@@ -19,6 +19,8 @@ const { buildCompanyWhere, buildOrder, applySignalFilter } = require('../utils/c
 const { rescoreCompany, PRESENCE_INCLUDE } = require('../services/companyService');
 const { scoreCompany } = require('../services/leadScoring');
 const { sendCsv } = require('../utils/csv');
+const access = require('../services/accessService');
+const audit = require('../services/auditService');
 
 const EXPORT_COLUMNS = [
   'id', 'company_name', 'cin', 'registration_number', 'date_of_incorporation',
@@ -48,6 +50,7 @@ exports.exportCsv = async (req, res) => {
 };
 
 exports.get = async (req, res) => {
+  await access.assertCompanyAccess(req.user, req.params.id);
   const company = await Company.findByPk(req.params.id, {
     include: [
       { model: CompanyContact, as: 'contacts' },
@@ -90,7 +93,15 @@ exports.get = async (req, res) => {
     order: [['created_at', 'DESC']],
   });
 
-  return ok(res, { company, analysis, activities, notes });
+  await audit.record(req, {
+    action: 'company.viewed',
+    resourceType: 'company',
+    resourceId: company.id,
+    companyId: company.id,
+    leadId: company.leads[0]?.id,
+    fields: [...access.exposedContactFields(req.user, company), ...(company.websites?.length ? ['website'] : [])],
+  });
+  return ok(res, { company: access.maskCompany(req.user, company), analysis, activities, notes });
 };
 
 exports.create = async (req, res) => {

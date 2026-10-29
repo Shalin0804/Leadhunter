@@ -9,8 +9,8 @@ export default function Login() {
   const { login } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@leadhunter.local');
-  const [password, setPassword] = useState('Admin@123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -21,7 +21,7 @@ export default function Login() {
     try {
       await login(email.trim(), password);
       toast.success('Welcome back');
-      navigate('/dashboard');
+      navigate('/');
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {
@@ -59,7 +59,7 @@ export default function Login() {
       <div className="login-form-side">
         <motion.div className="login-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <h2>Sign in</h2>
-          <p className="sub">Use your LeadHunter CRM admin account.</p>
+          <p className="sub">Sign in with your LeadHunter CRM account.</p>
           {error && <div className="error-box mb-3">{error}</div>}
           <form onSubmit={submit}>
             <div className="field">
@@ -88,11 +88,7 @@ export default function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
-          <div className="demo-hint">
-            <strong>Development login</strong>
-            <br />
-            admin@leadhunter.local / Admin@123456
-          </div>
+          <p className="sub mt-3">No account? Ask your administrator for an invite.</p>
         </motion.div>
       </div>
     </div>

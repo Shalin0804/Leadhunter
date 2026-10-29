@@ -2,6 +2,7 @@ const { Lead, LeadSource, SearchRun, User, LeadExport, sequelize } = require('..
 const { ok } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
 const svc = require('../services/leadExportService');
+const audit = require('../services/auditService');
 
 // One export at a time per user — blocks duplicate requests from repeated clicks.
 // ponytail: in-process Set; move to a DB/redis lock if the API ever runs on >1 instance.
@@ -94,6 +95,10 @@ exports.exportXlsx = async (req, res) => {
       throw new ApiError(500, 'Could not generate the Excel file. Please try again.');
     }
     await recordExport(req.user, parsed, { status: 'SUCCESS', row_count: rows });
+    // The file is already sent; a failure here is still logged loudly by auditService.
+    await audit
+      .record(req, { action: 'lead.exported', resourceType: 'lead', fields: parsed.columns, metadata: { format: 'xlsx', rows, date_field: parsed.dateField, filters: Object.keys(parsed.filters || {}).join(',') } })
+      .catch(() => {});
     return undefined;
   } finally {
     inFlight.delete(req.user.id);

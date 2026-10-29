@@ -4,12 +4,17 @@ const { generate, generateWithAI } = require('../services/outreachGeneratorServi
 const { ok, parsePagination, paginated } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
 const { SCORING_INCLUDE } = require('../services/companyService');
+const { Op } = require('sequelize');
+const access = require('../services/accessService');
+const audit = require('../services/auditService');
 
 exports.list = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const where = {};
   if (req.query.lead_id) where.lead_id = req.query.lead_id;
   if (req.query.company_id) where.company_id = req.query.company_id;
+  const leadIds = await access.accessibleLeadIds(req.user);
+  if (leadIds) where[Op.and] = [{ lead_id: { [Op.in]: leadIds } }];
   const { rows, count } = await Outreach.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
   return ok(res, paginated(rows, count, page, limit));
 };
@@ -17,6 +22,11 @@ exports.list = async (req, res) => {
 exports.generate = async (req, res) => {
   const { company_id, lead_id, channel, contact_name, use_ai } = req.body;
   if (!company_id) throw ApiError.badRequest('company_id is required');
+  await access.assertCompanyAccess(req.user, company_id);
+  if (lead_id) {
+    const l = await access.loadAccessibleLead(req.user, lead_id);
+    if (l.company_id !== Number(company_id)) throw ApiError.badRequest('lead_id does not belong to company_id');
+  }
   if (!Outreach.CHANNELS.includes(channel)) throw ApiError.badRequest(`channel must be one of: ${Outreach.CHANNELS.join(', ')}`);
 
   const company = await Company.findByPk(company_id, { include: SCORING_INCLUDE });
@@ -54,12 +64,22 @@ exports.generate = async (req, res) => {
     body: draft.subject || draft.body.slice(0, 120),
   });
 
+  await audit.record(req, {
+    action: 'lead.outreach_generated',
+    resourceType: 'outreach',
+    resourceId: outreach.id,
+    leadId: outreach.lead_id,
+    companyId: company.id,
+    metadata: { channel, generated_by: draft.generatedBy },
+  });
   return ok(res, { outreach, ai_error: draft.aiError || null }, 201);
 };
 
 exports.remove = async (req, res) => {
   const row = await Outreach.findByPk(req.params.id);
   if (!row) throw ApiError.notFound('Outreach draft not found');
+  const leadIds = await access.accessibleLeadIds(req.user);
+  if (leadIds && !leadIds.includes(row.lead_id)) throw ApiError.notFound('Outreach draft not found');
   await row.destroy();
   return ok(res, { message: 'Outreach draft deleted' });
 };

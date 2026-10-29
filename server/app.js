@@ -2,6 +2,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
+const crypto = require('crypto');
 const config = require('./config/config');
 const routes = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
@@ -19,6 +20,12 @@ const corsOrigin = (origin, cb) => {
   return cb(new Error(`Origin not allowed by CORS: ${origin}`));
 };
 
+// Server-generated request id, stamped on audit rows and echoed for support/debugging.
+app.use((req, res, next) => {
+  req.id = crypto.randomUUID();
+  res.set('X-Request-Id', req.id);
+  next();
+});
 app.use(helmet());
 // Expose Content-Disposition so cross-origin downloads keep the server's filename.
 app.use(cors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Content-Disposition'] }));

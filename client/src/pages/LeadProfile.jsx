@@ -4,6 +4,8 @@ import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, 
 import { useApi } from '../hooks/useApi';
 import { leadApi, companyApi, hermesApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
 import { ContactLeadModal, ContactStatusModal, RecontactModal, OutreachModal } from '../components/contactModals';
@@ -32,6 +34,7 @@ const Row = ({ label, children }) => (
 );
 
 export default function LeadProfile() {
+  const { can } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -124,7 +127,7 @@ export default function LeadProfile() {
       </div>
     );
 
-  const { lead, activities, tasks, notes } = data;
+  const { lead, activities, tasks, notes, assignments = [] } = data;
   const emails = lead.company?.contacts?.filter((c) => c.type === 'email') || [];
   const phones = lead.company?.contacts?.filter((c) => c.type === 'phone') || [];
   const linkedinOnly = lead.company?.contacts?.filter((c) => c.type === 'linkedin') || [];
@@ -190,7 +193,7 @@ export default function LeadProfile() {
             </Link>
           </p>
         </div>
-        <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+        {can('leads.edit') && <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
           {lead.contact_status === 'NOT_CONTACTED' ? (
             <button className="btn btn-primary" onClick={() => setModal({ type: 'contact' })}>
               <FiPhoneCall /> Contact
@@ -208,16 +211,18 @@ export default function LeadProfile() {
           <button className="btn" onClick={() => setModal({ type: 'outreach' })}>
             <FiZap /> Generate outreach
           </button>
-          <button className="btn" onClick={() => setModal({ type: 'assign' })}>
-            <FiUser /> Assign
-          </button>
+          {can('leads.assign') && (
+            <button className="btn" onClick={() => setModal({ type: 'assign' })}>
+              <FiUser /> Assign
+            </button>
+          )}
           <button className="btn" onClick={() => setModal({ type: 'note' })}>
             <FiFileText /> Note
           </button>
           <button className="btn" onClick={() => setModal({ type: 'follow' })}>
             <FiClock /> Follow-up
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="flex gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
@@ -225,6 +230,7 @@ export default function LeadProfile() {
           <button
             key={s}
             className={`chip ${lead.status === s ? 'active' : ''}`}
+            disabled={!can('leads.edit')}
             onClick={() => setStatus(s)}
           >
             {STATUS_LABELS[s]}
@@ -280,7 +286,23 @@ export default function LeadProfile() {
                   onBlur={(e) => setField({ next_follow_up_at: e.target.value })}
                 />
               </Row>
-              <Row label="Assigned user">{lead.assignedUser?.name || 'Unassigned'}</Row>
+              <Row label="Assigned user">
+                {lead.assignedUser?.name || 'Unassigned'}
+                {assignments.length > 0 && (
+                  <details className="assign-history">
+                    <summary className="cell-sub">Assignment history ({assignments.length})</summary>
+                    <ul>
+                      {assignments.map((a) => (
+                        <li key={a.id} className="text-sm">
+                          {fmtDateTime(a.created_at)} — {a.previousUser?.name || 'Unassigned'} → <strong>{a.newUser?.name || 'Unassigned'}</strong>
+                          {a.assignedBy && <span className="cell-sub"> by {a.assignedBy.name}</span>}
+                          {a.reason && <span className="cell-sub"> · {a.reason}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </Row>
               <Row label="Contacted at">{fmtDateTime(lead.contacted_at)}</Row>
               <Row label="Last contacted">{fmtDateTime(lead.last_contacted_at)}</Row>
               <Row label="Created">{fmtDate(lead.created_at)}</Row>
@@ -291,12 +313,12 @@ export default function LeadProfile() {
 
           <Card
             title="Contact Information"
-            actions={<button className="btn btn-sm" onClick={enrichNow}><FiZap /> Enrich now</button>}
+            actions={can('discovery.use') && <button className="btn btn-sm" onClick={enrichNow}><FiZap /> Enrich now</button>}
           >
             {emails.length > 0 ? (
               emails.map((e) => (
                 <dl className="def-list mb-3" key={e.id}>
-                  <Row label="Email">{e.value}</Row>
+                  <Row label="Email"><ContactValue contact={e} leadId={lead.id} /></Row>
                   <Row label="Verification status">
                     <span className={`badge ${e.verification_status === 'VERIFIED' ? 'green' : e.verification_status === 'INVALID' ? 'not_qualified' : e.verification_status === 'RISKY' ? 'warm' : 'gray'}`}>
                       {e.verification_status || 'UNKNOWN'}
@@ -314,7 +336,7 @@ export default function LeadProfile() {
             {phones.length > 0 ? (
               phones.map((p) => (
                 <dl className="def-list mb-3" key={p.id}>
-                  <Row label="Phone">{p.value}</Row>
+                  <Row label="Phone"><ContactValue contact={p} leadId={lead.id} /></Row>
                   <Row label="Source">{p.source || 'unknown'}</Row>
                 </dl>
               ))
@@ -329,7 +351,7 @@ export default function LeadProfile() {
                     {c.job_title && <span className="cell-sub"> — {c.job_title}</span>}
                   </Row>
                   <Row label="LinkedIn">
-                    <a href={c.value} target="_blank" rel="noreferrer">{c.value}</a>
+                    <ContactValue contact={c} leadId={lead.id} render={(v) => <a href={v} target="_blank" rel="noreferrer">{v}</a>} />
                   </Row>
                   <Row label="Contact details">
                     <span className="badge gray">Not yet revealed</span>
@@ -469,7 +491,7 @@ export default function LeadProfile() {
             )}
           </Card>
 
-          <Card
+          {can('discovery.use') && (<Card
             title="Hermes Research"
             actions={
               <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
@@ -535,7 +557,7 @@ export default function LeadProfile() {
                 )}
               </>
             )}
-          </Card>
+          </Card>)}
 
           <Card title="Activity timeline">
             {activities.length ? (

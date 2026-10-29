@@ -64,3 +64,19 @@ export const DonutChartBox = ({ data, nameKey, valueKey }) => (
     </PieChart>
   </ResponsiveContainer>
 );
+
+// Several series over one x-axis, e.g. team activity per day.
+export const MultiLineChartBox = ({ data, xKey, series }) => (
+  <ResponsiveContainer width="100%" height="100%">
+    <LineChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
+      <CartesianGrid stroke={GRID} vertical={false} />
+      <XAxis dataKey={xKey} tick={AXIS} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+      <YAxis tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} width={30} />
+      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e9f0' }} />
+      <Legend wrapperStyle={{ fontSize: 11 }} />
+      {series.map((s, i) => (
+        <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color || PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
+      ))}
+    </LineChart>
+  </ResponsiveContainer>
+);

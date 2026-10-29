@@ -14,7 +14,11 @@
     "test": "node seed/smoke-test.js",
     "test:monitoring": "node seed/monitoring-check.js",
     "test:export": "node --test tests/leadExport.test.js",
-    "agent:ingest": "node scripts/agentIngest.js"
+    "agent:ingest": "node scripts/agentIngest.js",
+    "test:rbac": "node --test tests/rbac.test.js",
+    "create-admin": "node scripts/createAdmin.js",
+    "test:locations": "node --test tests/locations.test.js",
+    "test:all": "node --test tests/"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

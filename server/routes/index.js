@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requirePermission } = require('../middleware/auth');
 const automationController = require('../controllers/automationController');
 const { asyncHandler } = require('../utils/http');
 
@@ -18,22 +18,29 @@ router.get('/automation/heartbeat', asyncHandler(automationController.heartbeat)
 // Everything below requires a valid JWT.
 router.use(authenticate);
 
+// Record-level scoping (which leads/companies) is enforced in the controllers via
+// services/accessService.js; these gates decide which feature areas a role may use.
+const discovery = requirePermission('discovery.use');
+
 router.use('/users', require('./user.routes'));
+router.use('/audit', require('./audit.routes'));
+router.use('/locations', require('./location.routes'));
+router.use('/lead-discovery', require('./leadDiscovery.routes'));
 router.use('/companies', require('./company.routes'));
-router.use('/discovery', require('./discovery.routes'));
+router.use('/discovery', discovery, require('./discovery.routes'));
 router.use('/leads', require('./lead.routes'));
 router.use('/pipeline', require('./pipeline.routes'));
 router.use('/tasks', require('./task.routes'));
 router.use('/notes', require('./note.routes'));
-router.use('/imports', require('./import.routes'));
-router.use('/signals', require('./signal.routes'));
-router.use('/apollo', require('./apollo.routes'));
-router.use('/automation', require('./automation.routes'));
+router.use('/imports', discovery, require('./import.routes'));
+router.use('/signals', discovery, require('./signal.routes'));
+router.use('/apollo', discovery, require('./apollo.routes'));
+router.use('/automation', discovery, require('./automation.routes'));
 router.use('/outreach', require('./outreach.routes'));
-router.use('/dashboard', require('./dashboard.routes'));
+router.use('/dashboard', requirePermission('dashboard.view'), require('./dashboard.routes'));
 router.use('/hermes', require('./hermes.routes'));
-router.use('/ai', require('./ai.routes'));
-router.use('/leadiq', require('./leadiq.routes'));
-router.use('/explorium', require('./explorium.routes'));
+router.use('/ai', discovery, require('./ai.routes'));
+router.use('/leadiq', discovery, require('./leadiq.routes'));
+router.use('/explorium', discovery, require('./explorium.routes'));
 
 module.exports = router;

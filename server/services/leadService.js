@@ -1,4 +1,4 @@
-const { sequelize, Company, Lead, LeadStatusHistory, Activity, Note, Task } = require('../models');
+const { sequelize, Company, Lead, LeadStatusHistory, Activity, Note, Task, LeadAssignment, User } = require('../models');
 const { scoreCompany } = require('./leadScoring');
 const { SCORING_INCLUDE } = require('./companyService');
 const ApiError = require('../utils/ApiError');
@@ -239,4 +239,35 @@ async function recontact(leadId, { userId, toContactStatus = 'FOLLOW_UP', note }
   return setContactStatus(leadId, toContactStatus, { userId, note: note || 'Re-contact initiated' });
 }
 
-module.exports = { convertCompanyToLead, changeLeadStatus, setContactStatus, markContacted, setLeadStatus, recontact };
+/**
+ * Change a lead's owner and record it in lead_assignments + the lead timeline.
+ * Returns { changed, from, to }. Authorization is the caller's job (see leadController.assign).
+ */
+async function assignLead(lead, newUserId, { byUserId, reason } = {}) {
+  const from = lead.assigned_user_id ?? null;
+  const to = newUserId ?? null;
+  if (from === to) return { changed: false, from, to };
+  const newUser = to ? await User.findByPk(to, { attributes: ['id', 'name'] }) : null;
+  await sequelize.transaction(async (transaction) => {
+    lead.assigned_user_id = to;
+    await lead.save({ transaction });
+    await LeadAssignment.create(
+      { lead_id: lead.id, previous_user_id: from, new_user_id: to, assigned_by_user_id: byUserId || null, reason: reason ? String(reason).slice(0, 500) : null },
+      { transaction }
+    );
+    await Activity.create(
+      {
+        lead_id: lead.id,
+        company_id: lead.company_id,
+        user_id: byUserId || null,
+        type: 'assignment',
+        title: newUser ? `${from ? 'Reassigned' : 'Assigned'} to ${newUser.name}` : 'Unassigned',
+        body: reason || null,
+      },
+      { transaction }
+    );
+  });
+  return { changed: true, from, to };
+}
+
+module.exports = { assignLead, convertCompanyToLead, changeLeadStatus, setContactStatus, markContacted, setLeadStatus, recontact };

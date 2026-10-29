@@ -4,6 +4,8 @@ import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw, FiClock, FiStar, 
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { ContactLeadModal, RecontactModal } from '../components/contactModals';
 import ExportLeadsModal from '../components/ExportLeadsModal';
@@ -30,7 +32,8 @@ const CONTACT_TONE = {
   DO_NOT_CONTACT: 'not_qualified',
 };
 
-export default function Leads() {
+export default function Leads({ mine = false }) {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const toast = useToast();
@@ -53,6 +56,7 @@ export default function Leads() {
     () => ({
       page,
       limit: 15,
+      mine: mine ? 'true' : undefined,
       search: debounced,
       status: get('status'),
       contact_status: get('contact_status'),
@@ -65,11 +69,12 @@ export default function Leads() {
       created_from: get('created_from'),
       follow_up_due: get('follow_up_due'),
       new_only: get('new_only'),
+      has_website: get('has_website'),
       sort: get('sort') || 'lead_score',
       dir: get('dir') || 'desc',
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [page, debounced, params.toString()]
+    [page, debounced, params.toString(), mine]
   );
 
   const { data, loading, error, reload } = useApi(() => leadApi.list(query), [JSON.stringify(query)]);
@@ -109,17 +114,17 @@ export default function Leads() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Leads</h1>
-          <p>Qualified opportunities moving through your sales process.</p>
+          <h1>{mine ? 'My Leads' : 'Leads'}</h1>
+          <p>{mine ? 'Leads assigned to you.' : 'Qualified opportunities moving through your sales process.'}</p>
         </div>
-        <div className="flex gap-2">
+        {can('leads.export') && <div className="flex gap-2">
           <button className="btn" onClick={() => leadApi.exportCsv(query).catch((e) => toast.error(e.message))}>
             <FiDownload /> Export CSV
           </button>
           <button className="btn btn-primary" onClick={() => setModal({ type: 'export' })}>
             📊 Export to Excel (.xlsx)
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="chip-row mb-3">
@@ -128,6 +133,13 @@ export default function Leads() {
         </button>
         <button className={`chip ${get('new_only') === 'true' ? 'active' : ''}`} onClick={() => setParam('new_only', 'true')}>
           New (not yet contacted)
+        </button>
+        <button
+          className={`chip ${get('has_website') === 'false' ? 'active' : ''}`}
+          onClick={() => setParam('has_website', get('has_website') === 'false' ? '' : 'false')}
+          title="Businesses where discovery found no website — a prospect signal, not proof they have none"
+        >
+          Website prospects (no website found)
         </button>
       </div>
 
@@ -256,7 +268,7 @@ export default function Leads() {
                         <td className="text-sm">
                           {email ? (
                             <span title={`source: ${email.source || 'unknown'}${email.verification_status ? `, ${email.verification_status}` : ''}`}>
-                              {email.value}
+                              <ContactValue contact={email} leadId={l.id} />
                               {email.verification_status && (
                                 <span className={`badge ${email.verification_status === 'VERIFIED' ? 'green' : email.verification_status === 'INVALID' ? 'not_qualified' : 'gray'}`} style={{ marginLeft: 4 }}>
                                   {email.verification_status}
@@ -267,7 +279,7 @@ export default function Leads() {
                             '—'
                           )}
                         </td>
-                        <td className="text-sm">{phone?.value || '—'}</td>
+                        <td className="text-sm"><ContactValue contact={phone} leadId={l.id} /></td>
                         <td className="text-sm">{l.recommended_service || '—'}</td>
                         <td className="text-sm">
                           {topSignal ? (

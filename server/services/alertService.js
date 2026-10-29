@@ -120,6 +120,27 @@ async function send(type, facts) {
   return false;
 }
 
+/** Invite / password-reset email to an employee. Uses the alert SMTP settings; resolves false (never throws) when unavailable. */
+async function sendSetPasswordEmail(user, link, kind) {
+  if (configProblem()) return false;
+  const subject = kind === 'invite' ? '[LeadHunter] You have been invited to LeadHunter CRM' : '[LeadHunter] Reset your LeadHunter CRM password';
+  const intro = kind === 'invite' ? 'An administrator created a LeadHunter CRM account for you.' : 'An administrator started a password reset for your account.';
+  const text = `Hi ${user.name},
+
+${intro}
+Set your password here (single use, expires soon):
+${link}
+
+If you did not expect this, ignore this email.`;
+  try {
+    await getTransporter().sendMail({ from: config.alerts.from, to: user.email, subject, text });
+    return true;
+  } catch (err) {
+    console.error(`[alerts] set-password email to user ${user.id} failed: ${err.message}`);
+    return false;
+  }
+}
+
 async function getState(type) {
   const row = await Setting.findOne({ where: { key: STATE_PREFIX + type } });
   return row?.value || { active: false, last_sent_at: null };
@@ -167,4 +188,4 @@ async function resolve(types, recoveryType, facts) {
   }
 }
 
-module.exports = { raise, resolve, send, render, configProblem, logConfigStatus, TEMPLATES, retryDelays: RETRY_DELAYS_MS, _resetTransporter: () => (transporter = undefined) };
+module.exports = { raise, resolve, send, sendSetPasswordEmail, render, configProblem, logConfigStatus, TEMPLATES, retryDelays: RETRY_DELAYS_MS, _resetTransporter: () => (transporter = undefined) };

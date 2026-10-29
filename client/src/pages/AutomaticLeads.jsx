@@ -4,6 +4,8 @@ import { FiDownload, FiExternalLink, FiZap } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, SourceBadge, Modal } from '../components/ui';
 import { PRESETS, presetRange } from '../components/ExportLeadsModal';
 import { fmtDate, fmtDateTime, STATUS_LABELS } from '../utils/format';
@@ -24,6 +26,7 @@ const providerLabel = (key) => PROVIDER_LABELS[key] || (key ? key.replace(/_/g, 
 // (see server/services/discoveryOrchestrator.js) — never by date, score, or any
 // other heuristic. This page just renders whatever the API returns for that filter.
 export default function AutomaticLeads() {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [csvOpen, setCsvOpen] = useState(false);
@@ -74,9 +77,11 @@ export default function AutomaticLeads() {
           <Link className="btn" to="/automation">
             <FiZap /> Automation settings
           </Link>
-          <button className="btn" onClick={() => setCsvOpen(true)}>
-            <FiDownload /> Export CSV
-          </button>
+          {can('leads.export') && (
+            <button className="btn" onClick={() => setCsvOpen(true)}>
+              <FiDownload /> Export CSV
+            </button>
+          )}
         </div>
       </div>
 
@@ -166,8 +171,8 @@ export default function AutomaticLeads() {
                           </Link>
                         </td>
                         <td className="text-sm">{email?.contact_name || 'Not available'}</td>
-                        <td className="text-sm">{email?.value || 'Not available'}</td>
-                        <td className="text-sm">{phone?.value || 'Not available'}</td>
+                        <td className="text-sm"><ContactValue contact={email} leadId={l.id} fallback="Not available" /></td>
+                        <td className="text-sm"><ContactValue contact={phone} leadId={l.id} fallback="Not available" /></td>
                         <td className="text-sm">
                           {l.company?.website ? (
                             <a href={l.company.website} target="_blank" rel="noreferrer">

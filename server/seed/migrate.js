@@ -15,6 +15,7 @@ const { sequelize } = require('../models');
 
 const FRESH = process.argv.includes('--fresh');
 const ALTER = process.argv.includes('--alter');
+const RLS = process.argv.includes('--enable-rls');
 const isPostgres = config.db.dialect === 'postgres';
 
 // Only self-provision the database for a local MySQL server. Hosted providers
@@ -73,6 +74,87 @@ async function remapLegacyTemperatureValues() {
   }
 }
 
+/**
+ * Employee-management / RBAC columns on the existing `users` table. Additive only:
+ * every step checks first, so it's a no-op once applied. Needed explicitly because
+ * plain sync() (the MySQL/TiDB default) never alters an existing table.
+ * Existing users keep their role — no one is promoted.
+ */
+async function migrateUsersTable() {
+  const qi = sequelize.getQueryInterface();
+  const { DataTypes } = require('sequelize');
+  if (isPostgres) {
+    // ADD VALUE can't run inside a transaction block; sequelize.query runs it standalone.
+    await sequelize.query(`ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS 'viewer'`).catch((err) => {
+      if (!/does not exist/i.test(err.message)) throw err;
+    });
+  }
+  let cols;
+  try {
+    cols = await qi.describeTable('users');
+  } catch {
+    return; // fresh DB — sync() creates the full table
+  }
+  if (!isPostgres && cols.role && !/viewer/.test(cols.role.type)) {
+    await qi.changeColumn('users', 'role', { type: DataTypes.ENUM('admin', 'manager', 'agent', 'viewer'), allowNull: false, defaultValue: 'agent' });
+  }
+  const add = {
+    last_activity_at: { type: DataTypes.DATE, allowNull: true },
+    manager_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    password_changed_at: { type: DataTypes.DATE, allowNull: true },
+    set_password_token_hash: { type: DataTypes.STRING(64), allowNull: true },
+    set_password_expires_at: { type: DataTypes.DATE, allowNull: true },
+  };
+  for (const [name, def] of Object.entries(add)) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!cols[name]) await qi.addColumn('users', name, def);
+  }
+  console.log('[migrate] users table has RBAC columns (role incl. viewer, manager_id, last_activity_at, set-password token)');
+}
+
+/**
+ * Postgres: make audit_logs append-only at the database level. UPDATE is always
+ * rejected; DELETE only inside a session that sets app.audit_purge = 'on'
+ * (the retention job in services/auditService.js does exactly that).
+ */
+async function protectAuditLog() {
+  if (!isPostgres) return;
+  await sequelize.query(`
+    CREATE OR REPLACE FUNCTION audit_logs_append_only() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' AND current_setting('app.audit_purge', true) = 'on' THEN
+        RETURN OLD;
+      END IF;
+      RAISE EXCEPTION 'audit_logs is append-only';
+    END;
+    $$ LANGUAGE plpgsql;`);
+  await sequelize.query('DROP TRIGGER IF EXISTS audit_logs_append_only ON "audit_logs"');
+  await sequelize.query(
+    'CREATE TRIGGER audit_logs_append_only BEFORE UPDATE OR DELETE ON "audit_logs" FOR EACH ROW EXECUTE FUNCTION audit_logs_append_only()'
+  );
+  console.log('[migrate] audit_logs append-only trigger installed');
+}
+
+/**
+ * Supabase exposes every table in `public` over its REST API to anyone holding the
+ * project's anon key. This API doesn't use that path (it connects as the table owner,
+ * which bypasses RLS), so enabling RLS with no policies closes it without affecting
+ * the app. Opt-in (--enable-rls) because it depends on the DB user owning the tables.
+ */
+async function enableRls() {
+  if (!RLS) return;
+  if (!isPostgres) {
+    console.log('[migrate] --enable-rls ignored: not a Postgres database');
+    return;
+  }
+  const [tables] = await sequelize.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
+  for (const { tablename } of tables) {
+    // eslint-disable-next-line no-await-in-loop
+    await sequelize.query(`ALTER TABLE "${tablename.replace(/"/g, '""')}" ENABLE ROW LEVEL SECURITY`);
+  }
+  console.log(`[migrate] row level security enabled on ${tables.length} public tables (no policies: anon/authenticated roles get no access)`);
+}
+
 async function run() {
   await ensureMysqlDatabase();
   await sequelize.authenticate();
@@ -85,6 +167,8 @@ async function run() {
     await remapLegacyTemperatureValues();
     console.log('[migrate] legacy lead_temperature values remapped (HIGH->WARM, NOT_QUALIFIED->LOW)');
   }
+
+  if (tableCount > 0 && !FRESH) await migrateUsersTable();
 
   if (FRESH) {
     console.log('[migrate] --fresh: dropping and recreating all tables');
@@ -103,6 +187,8 @@ async function run() {
   }
 
   console.log('[migrate] all tables synchronized');
+  await protectAuditLog();
+  await enableRls();
   await sequelize.close();
   process.exit(0);
 }

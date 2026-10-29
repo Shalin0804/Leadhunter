@@ -14,6 +14,7 @@ export const authApi = {
   login: (email, password) => unwrap(api.post('/auth/login', { email, password })),
   me: () => unwrap(api.get('/auth/me')),
   logout: () => api.post('/auth/logout').catch(() => {}),
+  setPassword: (token, password) => unwrap(api.post('/auth/set-password', { token, password })),
 };
 
 export const dashboardApi = {
@@ -56,6 +57,9 @@ export const leadApi = {
   exportPreview: (body) => unwrap(api.post('/leads/export/preview', body)),
   exportHistory: () => unwrap(api.get('/leads/export/history')),
   exportXlsx: (body) => downloadPost('/leads/export', body, 'leads-export.xlsx'),
+  assign: (body) => unwrap(api.post('/leads/assign', body)),
+  assignments: (id) => unwrap(api.get(`/leads/${id}/assignments`)),
+  revealContact: (leadId, contactId) => unwrap(api.post(`/leads/${leadId}/contacts/${contactId}/reveal`)),
 };
 
 export const pipelineApi = {
@@ -94,7 +98,40 @@ export const importApi = {
 };
 
 export const userApi = {
-  list: () => unwrap(api.get('/users')),
+  list: (params) => unwrap(api.get(`/users${qs(params)}`)),
+  invite: (body) => unwrap(api.post('/users/invite', body)),
+  update: (id, body) => unwrap(api.patch(`/users/${id}`, body)),
+  resetPassword: (id) => unwrap(api.post(`/users/${id}/reset-password`)),
+};
+
+export const locationApi = {
+  list: (params) => unwrap(api.get(`/locations${qs(params)}`)),
+  get: (id) => unwrap(api.get(`/locations/${id}`)),
+  create: (body) => unwrap(api.post('/locations', body)),
+  update: (id, body) => unwrap(api.patch(`/locations/${id}`, body)),
+  remove: (id) => unwrap(api.delete(`/locations/${id}`)),
+  catalog: () => unwrap(api.get('/locations/catalog')),
+  jobs: () => unwrap(api.get('/locations/import-jobs')),
+  importCountry: (country_code) => unwrap(api.post('/locations/import', { country_code })),
+  resumeJob: (id) => unwrap(api.post(`/locations/import-jobs/${id}/resume`)),
+  cancelJob: (id) => unwrap(api.post(`/locations/import-jobs/${id}/cancel`)),
+};
+
+export const leadDiscoveryApi = {
+  options: () => unwrap(api.get('/lead-discovery/options')),
+  updateCategories: (categories) => unwrap(api.put('/lead-discovery/categories', { categories })),
+  run: (body) => unwrap(api.post('/lead-discovery/run', body)),
+  runs: (params) => unwrap(api.get(`/lead-discovery/runs${qs(params)}`)),
+  runLeads: (id, params) => unwrap(api.get(`/lead-discovery/runs/${id}/leads${qs(params)}`)),
+};
+
+export const auditApi = {
+  logs: (params) => unwrap(api.get(`/audit/logs${qs(params)}`)),
+  get: (id) => unwrap(api.get(`/audit/logs/${id}`)),
+  meta: () => unwrap(api.get('/audit/meta')),
+  exportCsv: (params) => downloadFile(`/audit/logs/export${qs(params)}`, 'activity-log.csv'),
+  performance: (params) => unwrap(api.get(`/audit/performance${qs(params)}`)),
+  settings: () => unwrap(api.get('/audit/settings')),
 };
 
 export const automationApi = {
