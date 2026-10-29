@@ -21,6 +21,7 @@ import { dashboardApi } from '../services/endpoints';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, EmptyState } from '../components/ui';
 import { BarChartBox, LineChartBox, DonutChartBox } from '../components/charts';
 import { fmtDate, fmtDateTime, fmtNumber } from '../utils/format';
+import LeadGenPanel from '../components/LeadGenPanel';
 
 const CARD_META = [
   { key: 'totalCompanies', label: 'Total Companies', icon: <FiBriefcase /> },
@@ -65,10 +66,12 @@ export default function Dashboard() {
           <h1>Dashboard</h1>
           <p>New-company intelligence and pipeline overview.</p>
         </div>
-        <Link className="btn btn-primary" to="/discovery">
-          Explore companies
+        <Link className="btn btn-primary" to="/lead-discovery">
+          Discover business leads
         </Link>
       </div>
+
+      <LeadGenPanel />
 
       <div className="grid stat-grid mb-3">
         {CARD_META.map((m, i) => (

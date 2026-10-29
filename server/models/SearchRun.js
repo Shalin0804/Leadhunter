@@ -45,10 +45,22 @@ module.exports = (sequelize) => {
 
       error_message: { type: DataTypes.TEXT, allowNull: true },
       summary: { type: DataTypes.JSON, allowNull: true },
+
+      // Structured target. Null on historical runs and on free-text automation targets —
+      // never back-filled, since the original location can't be determined reliably.
+      location_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      country_code: { type: DataTypes.STRING(2), allowNull: true },
+      latitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
+      longitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
+      radius_km: { type: DataTypes.DECIMAL(6, 2), allowNull: true },
+      business_category_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      discovery_job_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Effective parameters actually used: filters, limits and per-provider radius handling.
+      search_params: { type: DataTypes.JSON, allowNull: true },
     },
     {
       tableName: 'search_runs',
-      indexes: [{ fields: ['status'] }, { fields: ['started_at'] }],
+      indexes: [{ fields: ['status'] }, { fields: ['started_at'] }, { fields: ['location_id'] }],
     }
   );
 

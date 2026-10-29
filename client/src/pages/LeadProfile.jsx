@@ -127,7 +127,7 @@ export default function LeadProfile() {
       </div>
     );
 
-  const { lead, activities, tasks, notes, assignments = [] } = data;
+  const { lead, activities, tasks, notes, assignments = [], score_explanation: why } = data;
   const emails = lead.company?.contacts?.filter((c) => c.type === 'email') || [];
   const phones = lead.company?.contacts?.filter((c) => c.type === 'phone') || [];
   const linkedinOnly = lead.company?.contacts?.filter((c) => c.type === 'linkedin') || [];
@@ -240,6 +240,22 @@ export default function LeadProfile() {
 
       <div className="profile-grid">
         <div className="grid" style={{ gap: 16 }}>
+          {why && (
+            <Card title={`Why this score: ${why.score}/100`} actions={<span className={`badge ${why.confidence === 'high' ? 'green' : why.confidence === 'medium' ? 'warm' : 'gray'}`} title="How much rests on checked evidence — not a probability">Confidence: {why.confidence}</span>}>
+              {(why.breakdown || []).map((b) => (
+                <div key={b.key} className="mb-2">
+                  <div className="flex justify-between text-sm"><strong>{b.label}</strong><span>{b.score}/{b.max}</span></div>
+                  <div className="metric-bar"><span style={{ width: `${b.max ? (b.score / b.max) * 100 : 0}%` }} /></div>
+                  {b.reasons?.length > 0 && <div className="cell-sub">{b.reasons.join(' · ')}</div>}
+                </div>
+              ))}
+              <div className="divider" />
+              <ul className="text-sm" style={{ margin: 0, paddingLeft: 18 }}>
+                {why.confidence_basis.map((x) => <li key={x}>{x}</li>)}
+              </ul>
+              <p className="cell-sub mt-2">{why.note} Scored {fmtDateTime(why.scored_at)} ({why.model_version}).</p>
+            </Card>
+          )}
           <Card title="Lead details">
             <dl className="def-list">
               <Row label="Score">

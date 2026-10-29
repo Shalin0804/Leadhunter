@@ -19,14 +19,16 @@ module.exports = (sequelize) => {
       manager_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       // JWTs issued before this moment are rejected (set on password change).
       password_changed_at: { type: DataTypes.DATE, allowNull: true },
-      // One-time invite / password-reset token — only its SHA-256 is stored.
+      // Set on logout: every JWT issued before it is rejected (logout ends the user's sessions).
+      sessions_revoked_at: { type: DataTypes.DATE, allowNull: true },
+      // One-time invite / password-reset token â€” only its SHA-256 is stored.
       set_password_token_hash: { type: DataTypes.STRING(64), allowNull: true },
       set_password_expires_at: { type: DataTypes.DATE, allowNull: true },
     },
     { tableName: 'users', indexes: [{ fields: ['manager_id'] }] }
   );
 
-  // Marker for an invited account that has not set a password yet — never a valid bcrypt hash.
+  // Marker for an invited account that has not set a password yet â€” never a valid bcrypt hash.
   User.NO_PASSWORD = '!invited';
 
   User.prototype.verifyPassword = function (plain) {

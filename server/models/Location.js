@@ -21,7 +21,7 @@ module.exports = (sequelize) => {
       country_code: { type: DataTypes.STRING(2), allowNull: false },
       location_type: { type: DataTypes.ENUM(...LOCATION_TYPES), allowNull: false },
       administrative_level: { type: DataTypes.INTEGER, allowNull: true }, // 0 country, 1 state, 2 city, 3 area
-      feature_code: { type: DataTypes.STRING(10), allowNull: true }, // GeoNames feature code (PPLA, PPLX, ...)
+      feature_code: { type: DataTypes.STRING(30), allowNull: true }, // GeoNames code (PPLA, PPLX, ...) or osm:<place>
       parent_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
       latitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
       longitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },

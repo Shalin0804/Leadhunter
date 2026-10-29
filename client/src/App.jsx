@@ -26,6 +26,9 @@ import ActivityLog from './pages/ActivityLog';
 import AdminSettings from './pages/AdminSettings';
 import LocationManagement from './pages/LocationManagement';
 import LeadDiscovery from './pages/LeadDiscovery';
+import BusinessCategories from './pages/BusinessCategories';
+import ScheduledDiscovery from './pages/ScheduledDiscovery';
+import Contacts from './pages/Contacts';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -88,6 +91,9 @@ export default function App() {
         <Route path="/access-history" element={guard('audit.view', <ActivityLog preset="access" key="access" />)} />
         <Route path="/audit-trail" element={guard('settings.manage', <ActivityLog preset="security" key="security" />)} />
         <Route path="/lead-discovery" element={guard('discovery.run', <LeadDiscovery />)} />
+        <Route path="/categories" element={guard('settings.manage', <BusinessCategories />)} />
+        <Route path="/discovery-jobs" element={guard('discovery.use', <ScheduledDiscovery />)} />
+        <Route path="/contacts" element={guard('leads.view', <Contacts />)} />
         <Route path="/locations" element={guard('locations.manage', <LocationManagement />)} />
         <Route path="/admin-settings" element={guard('settings.manage', <AdminSettings />)} />
       </Route>

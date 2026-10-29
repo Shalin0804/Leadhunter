@@ -84,14 +84,20 @@ class YelpBusinessProvider {
    * @param {{ location: string, industry: string, limit?: number }} params
    * @returns {{ items: object[], apiCallsUsed: number }}
    */
-  async searchBusinesses({ location, industry, limit = 40 }) {
+  async searchBusinesses({ location, industry, limit = 40, geo = null }) {
     if (!this.isConfigured()) {
       throw new Error('Yelp is not configured (set YELP_API_KEY)');
     }
 
     const category = categoryForIndustry(industry);
     const url = new URL('https://api.yelp.com/v3/businesses/search');
-    url.searchParams.set('location', location);
+    if (geo) {
+      url.searchParams.set('latitude', String(geo.latitude));
+      url.searchParams.set('longitude', String(geo.longitude));
+      url.searchParams.set('radius', String(Math.min(40000, Math.round(geo.radiusKm * 1000))));
+    } else {
+      url.searchParams.set('location', location);
+    }
     url.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 50)));
     if (category) url.searchParams.set('categories', category);
     else url.searchParams.set('term', industry);

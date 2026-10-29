@@ -4,6 +4,15 @@ const { asyncHandler } = require('../utils/http');
 const { requireRole } = require('../middleware/auth');
 
 // Everything here requires an authenticated user (mounted after `authenticate` in routes/index.js).
+// Scheduled location x category discovery jobs (whole /automation tree is Main Admin: discovery.use).
+const jobs = require('../controllers/discoveryJobController');
+router.get('/location-jobs', asyncHandler(jobs.list));
+router.get('/location-jobs/legacy', asyncHandler(jobs.legacy));
+router.post('/location-jobs', asyncHandler(jobs.create));
+router.patch('/location-jobs/:id', asyncHandler(jobs.update));
+router.delete('/location-jobs/:id', asyncHandler(jobs.remove));
+router.post('/location-jobs/:id/run', asyncHandler(jobs.runNow));
+
 router.get('/settings', asyncHandler(ctrl.getSettings));
 router.put('/settings', asyncHandler(ctrl.updateSettings));
 router.post('/run-now', asyncHandler(ctrl.runNow));

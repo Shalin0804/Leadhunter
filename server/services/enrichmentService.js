@@ -134,9 +134,11 @@ async function enrichCompany(companyId, { providerKey = 'hunter', verify = true,
     let verificationStatus = mapDomainSearchStatus(best.domainVerificationStatus);
     let confidence = best.confidence;
 
+    let verifiedNow = false;
     if (verify) {
       try {
         const verified = await provider.verifyEmail(best.email);
+        verifiedNow = true;
         await apiUsage.recordUsage(providerKey, { requests: 1, metadataDelta: { emails_verified: 1 } });
         verificationStatus = mapVerifierResult(verified.result);
         if (verified.score != null) confidence = verified.score;
@@ -151,14 +153,18 @@ async function enrichCompany(companyId, { providerKey = 'hunter', verify = true,
       where: { company_id: company.id, type: 'email', value: best.email },
       defaults: { is_primary: true, is_public_business: true },
     });
+    // Never downgrade: a result from the actual verifier (VERIFIED / INVALID) is only replaced by
+    // another verifier result, and fields the provider didn't return keep their known values.
+    const keepVerifierResult = !verifiedNow && ['VERIFIED', 'INVALID'].includes(contact.verification_status);
+    const name = [best.firstName, best.lastName].filter(Boolean).join(' ') || null;
     Object.assign(contact, {
       is_role_based: best.type === 'generic',
-      verification_status: verificationStatus,
-      confidence,
-      source: providerKey, // enrichment_provider
-      contact_name: [best.firstName, best.lastName].filter(Boolean).join(' ') || null,
-      job_title: best.position || null, // a.k.a. contact_role
-      linkedin_url: best.linkedin || null,
+      verification_status: keepVerifierResult ? contact.verification_status : verificationStatus,
+      confidence: keepVerifierResult ? contact.confidence : confidence,
+      source: contact.source || providerKey, // enrichment_provider (first source kept for provenance)
+      contact_name: name || contact.contact_name || null,
+      job_title: best.position || contact.job_title || null, // a.k.a. contact_role
+      linkedin_url: best.linkedin || contact.linkedin_url || null,
       enriched_at: new Date(),
     });
     await contact.save();

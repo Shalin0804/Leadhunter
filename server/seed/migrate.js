@@ -15,7 +15,7 @@ const { sequelize } = require('../models');
 
 const FRESH = process.argv.includes('--fresh');
 const ALTER = process.argv.includes('--alter');
-const RLS = process.argv.includes('--enable-rls');
+const NO_RLS = process.argv.includes('--no-rls');
 const isPostgres = config.db.dialect === 'postgres';
 
 // Only self-provision the database for a local MySQL server. Hosted providers
@@ -98,18 +98,51 @@ async function migrateUsersTable() {
   if (!isPostgres && cols.role && !/viewer/.test(cols.role.type)) {
     await qi.changeColumn('users', 'role', { type: DataTypes.ENUM('admin', 'manager', 'agent', 'viewer'), allowNull: false, defaultValue: 'agent' });
   }
-  const add = {
+  await ensureColumns('users', {
     last_activity_at: { type: DataTypes.DATE, allowNull: true },
     manager_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     password_changed_at: { type: DataTypes.DATE, allowNull: true },
+    sessions_revoked_at: { type: DataTypes.DATE, allowNull: true },
     set_password_token_hash: { type: DataTypes.STRING(64), allowNull: true },
     set_password_expires_at: { type: DataTypes.DATE, allowNull: true },
-  };
-  for (const [name, def] of Object.entries(add)) {
-    // eslint-disable-next-line no-await-in-loop
-    if (!cols[name]) await qi.addColumn('users', name, def);
+  });
+  console.log('[migrate] users table has RBAC columns (role incl. viewer, manager_id, session revocation, set-password token)');
+
+  // Structured location data on search runs (historical rows stay null).
+  await ensureColumns('search_runs', {
+    location_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    country_code: { type: DataTypes.STRING(2), allowNull: true },
+    latitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
+    longitude: { type: DataTypes.DECIMAL(9, 6), allowNull: true },
+    radius_km: { type: DataTypes.DECIMAL(6, 2), allowNull: true },
+    business_category_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    discovery_job_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    search_params: { type: DataTypes.JSON, allowNull: true },
+  });
+
+  // locations.feature_code 10 -> 30 chars ("osm:neighbourhood"). Postgres gets this from sync alter;
+  // MySQL/TiDB doesn't alter by default, so widen it explicitly (widening never loses data).
+  if (!isPostgres) {
+    const loc = await qi.describeTable('locations').catch(() => null);
+    if (loc?.feature_code && /\(10\)/.test(loc.feature_code.type)) {
+      await qi.changeColumn('locations', 'feature_code', { type: DataTypes.STRING(30), allowNull: true });
+    }
   }
-  console.log('[migrate] users table has RBAC columns (role incl. viewer, manager_id, last_activity_at, set-password token)');
+}
+
+/** Add any missing columns to an existing table (no-op for a table that doesn't exist yet). */
+async function ensureColumns(table, defs) {
+  const qi = sequelize.getQueryInterface();
+  let cols;
+  try {
+    cols = await qi.describeTable(table);
+  } catch {
+    return;
+  }
+  for (const [name, def] of Object.entries(defs)) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!cols[name]) await qi.addColumn(table, name, def);
+  }
 }
 
 /**
@@ -136,23 +169,32 @@ async function protectAuditLog() {
 }
 
 /**
- * Supabase exposes every table in `public` over its REST API to anyone holding the
- * project's anon key. This API doesn't use that path (it connects as the table owner,
- * which bypasses RLS), so enabling RLS with no policies closes it without affecting
- * the app. Opt-in (--enable-rls) because it depends on the DB user owning the tables.
+ * Supabase exposes every table in `public` through its auto-generated REST API to
+ * holders of the project's anon/authenticated keys. LeadHunter never uses that path:
+ * the browser only talks to this API, and this API connects with DATABASE_URL as the
+ * tables' owner. Postgres exempts a table's owner (and BYPASSRLS roles) from RLS unless
+ * FORCE is set, so enabling RLS with *no policies* denies the anon/authenticated roles
+ * everything while leaving the API untouched.
+ *
+ * It is only applied when that exemption is provable for every table: the connected
+ * role must own each one or have BYPASSRLS. Otherwise nothing is changed and a warning
+ * says why. Pass --no-rls to skip. Re-run on every deploy so new tables are covered.
  */
 async function enableRls() {
-  if (!RLS) return;
-  if (!isPostgres) {
-    console.log('[migrate] --enable-rls ignored: not a Postgres database');
+  if (!isPostgres || NO_RLS) return;
+  const [[me]] = await sequelize.query('SELECT current_user AS role, (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypass');
+  const [tables] = await sequelize.query("SELECT tablename, tableowner, rowsecurity FROM pg_tables WHERE schemaname = 'public'");
+  const notOwned = tables.filter((t) => t.tableowner !== me.role);
+  if (notOwned.length && !me.bypass) {
+    console.warn(`[migrate] RLS NOT enabled: ${me.role} doesn't own ${notOwned.map((t) => t.tablename).join(', ')} and has no BYPASSRLS — enabling it could block the API`);
     return;
   }
-  const [tables] = await sequelize.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
-  for (const { tablename } of tables) {
+  const todo = tables.filter((t) => !t.rowsecurity);
+  for (const { tablename } of todo) {
     // eslint-disable-next-line no-await-in-loop
     await sequelize.query(`ALTER TABLE "${tablename.replace(/"/g, '""')}" ENABLE ROW LEVEL SECURITY`);
   }
-  console.log(`[migrate] row level security enabled on ${tables.length} public tables (no policies: anon/authenticated roles get no access)`);
+  console.log(`[migrate] row level security on for all ${tables.length} public tables (${todo.length} newly enabled; ${me.role} is ${me.bypass ? 'BYPASSRLS' : 'the owner'}, so the API is exempt; no policies, so anon/authenticated get no access)`);
 }
 
 async function run() {

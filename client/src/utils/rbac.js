@@ -59,6 +59,17 @@ export const ACTION_LABELS = {
   'discovery.started': 'Business discovery started',
   'discovery.completed': 'Business discovery finished',
   'discovery.categories_changed': 'Business categories changed',
+  'category.created': 'Category created',
+  'category.updated': 'Category updated',
+  'category.enabled': 'Category enabled',
+  'category.disabled': 'Category disabled',
+  'discovery_job.created': 'Discovery job scheduled',
+  'discovery_job.updated': 'Discovery job changed',
+  'discovery_job.deleted': 'Discovery job deleted',
+  'discovery_job.run_requested': 'Discovery job run manually',
+  'location.osm_localities_imported': 'Localities added from OSM',
+  'location.osm_localities_failed': 'OSM locality lookup failed',
+  'company.duplicate_reviewed': 'Duplicate reviewed',
 };
 
 export const actionLabel = (a) => ACTION_LABELS[a] || a;

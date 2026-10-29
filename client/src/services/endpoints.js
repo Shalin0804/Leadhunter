@@ -22,6 +22,9 @@ export const dashboardApi = {
   opportunities: (limit = 10) => unwrap(api.get(`/dashboard/opportunities${qs({ limit })}`)),
   activity: () => unwrap(api.get('/dashboard/activity')),
   automationStatus: () => unwrap(api.get('/dashboard/automation-status')),
+  leadGeneration: (params) => unwrap(api.get(`/dashboard/lead-generation${qs(params)}`)),
+  duplicates: (params) => unwrap(api.get(`/dashboard/duplicates${qs(params)}`)),
+  reviewDuplicate: (id, status) => unwrap(api.patch(`/dashboard/duplicates/${id}`, { status })),
 };
 
 export const companyApi = {
@@ -112,17 +115,33 @@ export const locationApi = {
   remove: (id) => unwrap(api.delete(`/locations/${id}`)),
   catalog: () => unwrap(api.get('/locations/catalog')),
   jobs: () => unwrap(api.get('/locations/import-jobs')),
-  importCountry: (country_code) => unwrap(api.post('/locations/import', { country_code })),
+  importCountry: (country_code, dataset) => unwrap(api.post('/locations/import', { country_code, dataset })),
+  discoverLocalities: (id, radius_km) => unwrap(api.post(`/locations/${id}/discover-localities`, { radius_km }, { timeout: 90000 })),
   resumeJob: (id) => unwrap(api.post(`/locations/import-jobs/${id}/resume`)),
   cancelJob: (id) => unwrap(api.post(`/locations/import-jobs/${id}/cancel`)),
 };
 
 export const leadDiscoveryApi = {
   options: () => unwrap(api.get('/lead-discovery/options')),
-  updateCategories: (categories) => unwrap(api.put('/lead-discovery/categories', { categories })),
+  categories: (params) => unwrap(api.get(`/lead-discovery/categories${qs(params)}`)),
+  createCategory: (body) => unwrap(api.post('/lead-discovery/categories', body)),
+  updateCategory: (id, body) => unwrap(api.patch(`/lead-discovery/categories/${id}`, body)),
   run: (body) => unwrap(api.post('/lead-discovery/run', body)),
   runs: (params) => unwrap(api.get(`/lead-discovery/runs${qs(params)}`)),
   runLeads: (id, params) => unwrap(api.get(`/lead-discovery/runs/${id}/leads${qs(params)}`)),
+};
+
+export const discoveryJobApi = {
+  list: () => unwrap(api.get('/automation/location-jobs')),
+  legacy: () => unwrap(api.get('/automation/location-jobs/legacy')),
+  create: (body) => unwrap(api.post('/automation/location-jobs', body)),
+  update: (id, body) => unwrap(api.patch(`/automation/location-jobs/${id}`, body)),
+  remove: (id) => unwrap(api.delete(`/automation/location-jobs/${id}`)),
+  run: (id) => unwrap(api.post(`/automation/location-jobs/${id}/run`)),
+};
+
+export const contactApi = {
+  list: (params) => unwrap(api.get(`/contacts${qs(params)}`)),
 };
 
 export const auditApi = {

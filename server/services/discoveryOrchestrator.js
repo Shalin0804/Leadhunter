@@ -21,7 +21,8 @@
 
 const { Company, CompanyContact, CompanyWebsite, Lead, LeadSource, SearchRun, Activity, LeadAssignment } = require('../models');
 const { getDiscoveryProvider } = require('../providers');
-const { findMatchingCompany, normalizeDomain, normalizePhone, normalizeName, normalizeAddress } = require('./dedupeService');
+const geoSearch = require('./geoSearch');
+const { matchCompany, recordPossibleDuplicate, normalizeDomain, normalizePhone, normalizeName, normalizeAddress } = require('./dedupeService');
 const { auditWebsite } = require('./websiteAuditService');
 const { detectOpportunities } = require('./opportunityDetectionService');
 const { detectAndSaveSignals } = require('./signalDetectionService');
@@ -35,7 +36,7 @@ const LEADGEN_PROVIDER_KEY = 'leadgen'; // daily-lead-limit counter key (indepen
 const MAX_LOGGED_ERRORS = 50;
 
 async function upsertBasicCompany(raw, { industry, providerKey, companySource = 'automation' }) {
-  const existing = await findMatchingCompany({
+  const match = await matchCompany({
     website: raw.website,
     phone: raw.phone,
     companyName: raw.company_name,
@@ -44,6 +45,7 @@ async function upsertBasicCompany(raw, { industry, providerKey, companySource = 
     externalId: raw.external_id,
     provider: providerKey,
   });
+  const existing = match.certain ? match.company : null;
 
   if (existing) {
     existing.times_discovered += 1;
@@ -80,6 +82,7 @@ async function upsertBasicCompany(raw, { industry, providerKey, companySource = 
     first_discovered_at: new Date(),
     last_discovered_at: new Date(),
   });
+  await recordPossibleDuplicate(company.id, match);
 
   // contact_name/job_title/linkedin_url are set by providers that return a named
   // decision-maker alongside the business (currently only LeadIQ) — every other
@@ -169,7 +172,7 @@ async function analyzeWebsite(company) {
  * result with the provider that found it. A provider that is unconfigured or
  * throws is recorded in `errors` and skipped — it never aborts the others.
  */
-async function discoverFromAllProviders({ location, industry, providers, limit, counters, errors, providersUsed }) {
+async function discoverFromAllProviders({ location, industry, providers, limit, counters, errors, providersUsed, geo, radius = {} }) {
   const allItems = [];
   for (const key of providers) {
     try {
@@ -179,12 +182,15 @@ async function discoverFromAllProviders({ location, industry, providers, limit, 
         continue; // eslint-disable-line no-continue
       }
       // eslint-disable-next-line no-await-in-loop
-      const { items, apiCallsUsed } = await provider.searchBusinesses({ location, industry, limit });
+      const { items: found, apiCallsUsed } = await provider.searchBusinesses({ location, industry, limit, geo: geoSearch.providerGeo(key, geo) });
       counters.api_calls_used += apiCallsUsed;
       // eslint-disable-next-line no-await-in-loop
       await apiUsage.recordUsage(key, { requests: apiCallsUsed });
       providersUsed.push(key);
-      items.forEach((item) => allItems.push({ ...item, _providerKey: key }));
+      // Enforce the radius on returned coordinates; record exactly what could and couldn't be checked.
+      const { kept, excluded, unverified } = geoSearch.applyRadius(found, geo);
+      if (geo) radius[key] = geoSearch.radiusReport(key, geo, { excluded, unverified, total: found.length });
+      kept.forEach((item) => allItems.push({ ...item, _providerKey: key }));
     } catch (providerErr) {
       counters.failed_requests += 1;
       errors.push({ step: `discovery:${key}`, message: providerErr.message });
@@ -202,8 +208,21 @@ async function discoverFromAllProviders({ location, industry, providers, limit, 
  */
 // assignToUserId: owner for leads this run creates (set for employee-initiated location runs so the
 // employee can see them); omitted by automation, which keeps creating unassigned leads as before.
-async function runForTarget({ location, industry, providerKey, discoveryProviders, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings, assignToUserId }) {
+// target (optional, structured runs): { locationId, countryCode, latitude, longitude, geo, categoryId,
+// jobId, maxResults, filters } — stored on the SearchRun; free-text runs leave these null.
+async function runForTarget({ location, industry, providerKey, discoveryProviders, minLeadScore, dailyLimit, triggeredBy, triggeredByUserId, settings, assignToUserId, target = {} }) {
   const providers = discoveryProviders?.length ? discoveryProviders : [providerKey || settings?.provider || 'osm'];
+  const geo = target.geo || null;
+  const radius = {};
+  const searchParams = {
+    location,
+    industry,
+    providers,
+    max_results: target.maxResults || null,
+    min_lead_score: minLeadScore ?? null,
+    ...(target.filters ? { filters: target.filters } : {}),
+    ...(geo ? { radius_km: geo.radiusKm } : {}),
+  };
 
   const run = await SearchRun.create({
     triggered_by: triggeredBy,
@@ -212,6 +231,14 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
     industries: [industry],
     provider: providers.join('+'),
     status: 'running',
+    location_id: target.locationId || null,
+    country_code: target.countryCode || null,
+    latitude: target.latitude ?? geo?.latitude ?? null,
+    longitude: target.longitude ?? geo?.longitude ?? null,
+    radius_km: geo?.radiusKm ?? null,
+    business_category_id: target.categoryId || null,
+    discovery_job_id: target.jobId || null,
+    search_params: searchParams,
   });
 
   const counters = {
@@ -255,10 +282,12 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
       location,
       industry,
       providers,
-      limit: Math.min(remaining * 2, 50),
+      limit: Math.min(remaining * 2, 50, target.maxResults || 50),
       counters,
       errors,
       providersUsed,
+      geo,
+      radius,
     });
 
     for (const raw of items) {
@@ -459,11 +488,13 @@ async function runForTarget({ location, industry, providerKey, discoveryProvider
       finished_at: new Date(),
       providers_used: providersUsed,
       errors: errors.slice(0, MAX_LOGGED_ERRORS),
+      search_params: geo ? { ...searchParams, radius } : searchParams,
       ...counters,
     });
     return run;
   } catch (err) {
     await run.update({
+      search_params: geo ? { ...searchParams, radius } : searchParams,
       status: 'failed',
       finished_at: new Date(),
       error_message: err.message,

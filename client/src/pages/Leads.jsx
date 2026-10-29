@@ -70,6 +70,12 @@ export default function Leads({ mine = false }) {
       follow_up_due: get('follow_up_due'),
       new_only: get('new_only'),
       has_website: get('has_website'),
+      quality: get('quality'),
+      website_review: get('website_review'),
+      opportunity: get('opportunity'),
+      verified_phone: get('verified_phone'),
+      verified_email: get('verified_email'),
+      updated_from: get('updated_from'),
       sort: get('sort') || 'lead_score',
       dir: get('dir') || 'desc',
     }),
@@ -141,6 +147,12 @@ export default function Leads({ mine = false }) {
         >
           Website prospects (no website found)
         </button>
+        <button className={`chip ${get('quality') === 'high' ? 'active' : ''}`} onClick={() => setParam('quality', get('quality') === 'high' ? '' : 'high')}>High quality (70+)</button>
+        <button className={`chip ${get('website_review') === 'true' ? 'active' : ''}`} onClick={() => setParam('website_review', get('website_review') === 'true' ? '' : 'true')} title="Website audit found it broken, unreachable, parked, poor or outdated">Website needs review</button>
+        <button className={`chip ${get('opportunity') === 'booking' ? 'active' : ''}`} onClick={() => setParam('opportunity', get('opportunity') === 'booking' ? '' : 'booking')} title="Detected booking / appointment / ordering gap">Booking opportunity</button>
+        <button className={`chip ${get('opportunity') === 'custom_software' ? 'active' : ''}`} onClick={() => setParam('opportunity', get('opportunity') === 'custom_software' ? '' : 'custom_software')} title="Expansion, new location or hiring signals">Custom software opportunity</button>
+        <button className={`chip ${get('verified_phone') === 'true' ? 'active' : ''}`} onClick={() => setParam('verified_phone', get('verified_phone') === 'true' ? '' : 'true')}>Verified phone</button>
+        <button className={`chip ${get('verified_email') === 'true' ? 'active' : ''}`} onClick={() => setParam('verified_email', get('verified_email') === 'true' ? '' : 'true')}>Verified email</button>
       </div>
 
       <Card className="mb-3">

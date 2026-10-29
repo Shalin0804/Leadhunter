@@ -15,6 +15,7 @@ function CountryImport({ onChanged }) {
   const { data: catalog, error: catalogError } = useApi(() => locationApi.catalog(), []);
   const { data, reload } = useApi(() => locationApi.jobs(), []);
   const [cc, setCc] = useState('');
+  const [dataset, setDataset] = useState('cities1000');
   const [busy, setBusy] = useState(false);
   const active = data?.jobs?.some((j) => ['queued', 'running'].includes(j.status));
 
@@ -48,14 +49,24 @@ function CountryImport({ onChanged }) {
             {(catalog?.countries || []).map((c) => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
           </select>
         </div>
-        <button className="btn btn-primary" disabled={!cc || busy} onClick={() => act(() => locationApi.importCountry(cc), 'Discovery started — it runs in the background')}>
+        <div className="field">
+          <label>Coverage</label>
+          <select className="select" value={dataset} onChange={(e) => setDataset(e.target.value)}>
+            <option value="cities15000">Large cities (15k+)</option>
+            <option value="cities5000">Towns 5k+</option>
+            <option value="cities1000">Towns 1k+ (default)</option>
+            <option value="cities500">Towns 500+ (most, larger import)</option>
+          </select>
+        </div>
+        <button className="btn btn-primary" disabled={!cc || busy} onClick={() => act(() => locationApi.importCountry(cc, dataset), 'Discovery started — it runs in the background')}>
           <FiGlobe /> Discover locations
         </button>
       </div>
       {catalogError && <ErrorBox message={catalogError} />}
       <p className="text-sm text-muted">
-        Source: GeoNames ({catalog?.dataset || 'cities1000'}, CC BY 4.0). Imports states, cities and towns with population ≥ 1,000, and neighbourhoods only where GeoNames records them —
-        villages and many small areas are not covered. Re-running a country syncs changes without duplicating anything; a stopped import resumes from its checkpoint.
+        Source: GeoNames (CC BY 4.0). Imports states and towns above the chosen population, plus neighbourhoods only where GeoNames records them.
+        For villages, suburbs and neighbourhoods, open a city and use <strong>Add localities (OSM)</strong> — a bounded OpenStreetMap lookup (© OpenStreetMap contributors, ODbL).
+        Re-running a country syncs changes without duplicating anything; a stopped import resumes from its checkpoint.
       </p>
 
       {data?.countries?.length > 0 && (
@@ -204,6 +215,16 @@ export default function LocationManagement() {
       toast.error(e.message);
     }
   };
+  const addLocalities = async (loc) => {
+    toast.success(`Asking OpenStreetMap for localities around ${loc.name}…`);
+    try {
+      const r = await locationApi.discoverLocalities(loc.id, 10);
+      toast.success(`${loc.name}: ${r.imported} added, ${r.matched_other_source} already known, ${r.already_imported} previously imported (of ${r.found} found)`);
+      reload();
+    } catch (e) {
+      toast.error(e.message);
+    }
+  };
   const remove = async (loc) => {
     try {
       const r = await locationApi.remove(loc.id);
@@ -316,6 +337,9 @@ export default function LocationManagement() {
                           <td>
                             <div className="flex gap-2">
                               <button className="btn btn-sm" title="Edit" onClick={() => setForm({ initial: l })}><FiEdit2 /></button>
+                              {['city', 'area'].includes(l.location_type) && l.latitude != null && (
+                                <button className="btn btn-sm" title="Add villages / suburbs / neighbourhoods within 10 km from OpenStreetMap" onClick={() => addLocalities(l)}>+ OSM</button>
+                              )}
                               <button className="btn btn-sm" title={l.is_active ? 'Deactivate' : 'Activate'} onClick={() => setConfirm({ loc: l, kind: 'toggle' })}><FiRefreshCw /></button>
                               <button className="btn btn-sm" title="Delete" onClick={() => setConfirm({ loc: l, kind: 'delete' })}><FiTrash2 /></button>
                             </div>

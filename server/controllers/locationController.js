@@ -190,7 +190,7 @@ exports.remove = async (req, res) => {
 
 exports.catalog = async (req, res) => {
   try {
-    return ok(res, { countries: await importer.listCountries(), source: 'GeoNames (CC BY 4.0)', dataset: importer.geonamesSource.dataset });
+    return ok(res, { countries: await importer.listCountries(), source: 'GeoNames (CC BY 4.0)', dataset: importer.geonamesSource.dataset, datasets: importer.DATASETS });
   } catch (err) {
     console.error('[locations] country catalog failed:', err.message);
     throw new ApiError(503, 'Could not reach GeoNames to list countries — try again shortly');
@@ -199,7 +199,7 @@ exports.catalog = async (req, res) => {
 
 exports.importCountry = async (req, res) => {
   try {
-    const { job } = await importer.startImport({ countryCode: req.body.country_code, userId: req.user.id });
+    const { job } = await importer.startImport({ countryCode: req.body.country_code, userId: req.user.id, dataset: req.body.dataset || undefined });
     await audit.record(req, { action: 'location.import_started', resourceType: 'location_import', resourceId: job.id, metadata: { country: job.country_code, dataset: job.dataset } });
     return ok(res, { job }, 202);
   } catch (err) {
@@ -245,6 +245,22 @@ exports.cancelJob = async (req, res) => {
   await job.update({ status: 'cancelled' }); // the worker stops at its next checkpoint
   await audit.record(req, { action: 'location.import_cancel_requested', resourceType: 'location_import', resourceId: job.id, metadata: { country: job.country_code } });
   return ok(res, { job });
+};
+
+/** Add villages / suburbs / neighbourhoods around a location from OpenStreetMap (bounded, see osmLocalityService). */
+exports.discoverLocalities = async (req, res) => {
+  const loc = await Location.findByPk(req.params.id);
+  if (!loc) throw ApiError.notFound('Location not found');
+  if (!['city', 'area', 'state'].includes(loc.location_type)) throw ApiError.badRequest('Localities can be added under a state, city or area');
+  try {
+    const result = await require('../services/osmLocalityService').discoverLocalities(loc, { radiusKm: req.body.radius_km });
+    await audit.record(req, { action: 'location.osm_localities_imported', resourceType: 'location', resourceId: loc.id, metadata: { name: loc.name, ...result, attribution: undefined, coverage_note: undefined } });
+    return ok(res, result);
+  } catch (err) {
+    if (err.statusCode) throw new ApiError(err.statusCode, err.message);
+    await audit.record(req, { action: 'location.osm_localities_failed', resourceType: 'location', resourceId: loc.id, result: 'failure', metadata: { error: String(err.message).slice(0, 200) } });
+    throw new ApiError(502, `OpenStreetMap did not respond (${err.message}) — try again later`);
+  }
 };
 
 exports.resolveUsable = resolveUsable;

@@ -106,6 +106,7 @@ export default function LeadDiscovery() {
   const [sel, setSel] = useState({});
   const [cats, setCats] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [opt, setOpt] = useState({ radius_km: '', max_results: 25, min_score: '', website: '', contact: '' });
   const [openRun, setOpenRun] = useState(null);
   const { data: opts, error: optsError } = useApi(() => leadDiscoveryApi.options(), []);
   const { data: runsData, reload: reloadRuns } = useApi(() => leadDiscoveryApi.runs({ limit: 15 }), []);
@@ -131,7 +132,7 @@ export default function LeadDiscovery() {
   const start = async () => {
     setBusy(true);
     try {
-      const r = await leadDiscoveryApi.run({ location_id: target.id, categories: cats });
+      const r = await leadDiscoveryApi.run({ location_id: target.id, category_ids: cats, ...opt, radius_km: opt.radius_km || undefined, min_score: opt.min_score || undefined });
       toast.success(`Discovery started for ${r.location}`);
       reloadRuns();
     } catch (e) {
@@ -168,15 +169,42 @@ export default function LeadDiscovery() {
       <Card title="2. What kind of business" className="mb-3">
         <div className="chip-row">
           {(opts?.categories || []).map((c) => (
-            <button key={c.key} className={`chip ${cats.includes(c.key) ? 'active' : ''}`} onClick={() => setCats((s) => (s.includes(c.key) ? s.filter((x) => x !== c.key) : s.length >= 5 ? s : [...s, c.key]))}>
-              {c.label}
+            <button key={c.id} className={`chip ${cats.includes(c.id) ? 'active' : ''}`} title={c.description || ''} onClick={() => setCats((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : s.length >= 5 ? s : [...s, c.id]))}>
+              {c.name}
             </button>
           ))}
         </div>
         <p className="text-sm text-muted mt-3">Up to 5 per run. Each category is searched separately on every configured provider.</p>
       </Card>
 
-      <Card title="3. Run" className="mb-3">
+      <Card title="3. Filters" className="mb-3">
+        <div className="filters">
+          <div className="field">
+            <label>Radius (km)</label>
+            <input className="input" type="number" min={1} max={opts?.max_radius_km || 100} placeholder={target?.latitude != null ? 'Whole area' : 'Needs coordinates'} disabled={target && target.latitude == null} value={opt.radius_km} onChange={(e) => setOpt({ ...opt, radius_km: e.target.value })} style={{ width: 130 }} />
+          </div>
+          <div className="field"><label>Max leads per category</label><input className="input" type="number" min={1} max={50} value={opt.max_results} onChange={(e) => setOpt({ ...opt, max_results: e.target.value })} style={{ width: 130 }} /></div>
+          <div className="field"><label>Minimum lead score</label><input className="input" type="number" min={0} max={100} placeholder="Default" value={opt.min_score} onChange={(e) => setOpt({ ...opt, min_score: e.target.value })} style={{ width: 130 }} /></div>
+          <div className="field">
+            <label>Website status</label>
+            <select className="select" value={opt.website} onChange={(e) => setOpt({ ...opt, website: e.target.value })}>
+              <option value="">Any</option><option value="yes">Website found</option><option value="no">No website found</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Contact details</label>
+            <select className="select" value={opt.contact} onChange={(e) => setOpt({ ...opt, contact: e.target.value })}>
+              <option value="">Any</option><option value="phone">Phone available</option><option value="email">Email available</option>
+            </select>
+          </div>
+        </div>
+        <p className="text-sm text-muted mt-3">
+          Radius: OpenStreetMap and Yelp filter natively (Yelp max 40 km); Serper results are filtered by their coordinates afterwards; providers without coordinates can't honour a radius — each run reports exactly what was enforced.
+          Website/contact filters apply to the results view.
+        </p>
+      </Card>
+
+      <Card title="4. Run" className="mb-3">
         <div className="flex items-center gap-3" style={{ flexWrap: 'wrap' }}>
           <button className="btn btn-primary" disabled={!target || !cats.length || busy || anyRunning || !configured.length} onClick={start}>
             <FiPlay /> {anyRunning ? 'A run is in progress…' : 'Discover business leads'}
@@ -205,7 +233,19 @@ export default function LeadDiscovery() {
                 {runs.map((r) => (
                   <tr key={r.id}>
                     <td className="text-sm">{fmtIST(r.started_at)}</td>
-                    <td className="text-sm">{r.locations?.join(', ')}<div className="cell-sub">{r.industries?.join(', ')}</div></td>
+                    <td className="text-sm">
+                      {r.locations?.join(', ')}
+                      <div className="cell-sub">
+                        {r.category?.name || r.industries?.join(', ')}
+                        {r.radius_km ? ` · ${Number(r.radius_km)} km` : ''}
+                        {r.location_id ? '' : ' · free-text target'}
+                      </div>
+                      {r.search_params?.radius && (
+                        <div className="cell-sub">
+                          {Object.entries(r.search_params.radius).map(([p, x]) => `${p}: ${x.enforced ? 'radius enforced' : x.mode === 'none' ? 'radius not enforceable' : 'radius partly enforced'}${x.excluded_outside_radius ? `, ${x.excluded_outside_radius} outside dropped` : ''}`).join(' · ')}
+                        </div>
+                      )}
+                    </td>
                     <td className="text-sm">{r.triggered_by_name || r.triggered_by}</td>
                     <td>
                       <span className={`badge ${r.status === 'completed' ? 'green' : r.status === 'running' ? 'blue' : 'not_qualified'}`}>

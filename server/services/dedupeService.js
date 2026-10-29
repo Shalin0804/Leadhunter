@@ -52,7 +52,15 @@ function normalizeAddress(address) {
  * Restaurant"), collapse into one Company row with multiple `lead_sources`
  * entries instead of becoming two rows.
  */
-async function findMatchingCompany({ cin, website, phone, companyName, address, city, externalId, provider, transaction } = {}) {
+/**
+ * Identity resolution. Returns { company, certain, reason }:
+ *   certain  -> same business (CIN, domain, phone, provider id, or name+city with no
+ *               conflicting domain/phone) — safe to merge into.
+ *   !certain -> a look-alike only (same name elsewhere, same address only, or name+city
+ *               but a different website/phone). Never merged automatically: the caller
+ *               creates a new company and records a DuplicateReview for an admin.
+ */
+async function matchCompany({ cin, website, phone, companyName, address, city, externalId, provider, transaction } = {}) {
   const domain = normalizeDomain(website);
   const normPhone = normalizePhone(phone);
   const normName = normalizeName(companyName);
@@ -60,15 +68,15 @@ async function findMatchingCompany({ cin, website, phone, companyName, address, 
 
   if (cin) {
     const byCin = await Company.findOne({ where: { cin: String(cin).toUpperCase() }, transaction });
-    if (byCin) return byCin;
+    if (byCin) return { company: byCin, certain: true, reason: 'cin' };
   }
   if (domain) {
     const byDomain = await Company.findOne({ where: { normalized_domain: domain }, transaction });
-    if (byDomain) return byDomain;
+    if (byDomain) return { company: byDomain, certain: true, reason: 'domain' };
   }
   if (normPhone) {
     const byPhone = await Company.findOne({ where: { normalized_phone: normPhone }, transaction });
-    if (byPhone) return byPhone;
+    if (byPhone) return { company: byPhone, certain: true, reason: 'phone' };
   }
   if (externalId && provider) {
     // Cross-provider re-discovery: a *different* provider previously reporting this
@@ -77,7 +85,7 @@ async function findMatchingCompany({ cin, website, phone, companyName, address, 
     const bySource = await LeadSource.findOne({ where: { provider, external_id: String(externalId) }, transaction });
     if (bySource) {
       const company = await Company.findByPk(bySource.company_id, { transaction });
-      if (company) return company;
+      if (company) return { company, certain: true, reason: 'provider_id' };
     }
   }
   if (normName && city) {
@@ -86,19 +94,44 @@ async function findMatchingCompany({ cin, website, phone, companyName, address, 
       where: { normalized_name: normName, [Op.and]: [seqWhere(fn('lower', col('city')), String(city).toLowerCase())] },
       transaction,
     });
-    if (byNameCity) return byNameCity;
+    if (byNameCity) {
+      // Same name in the same city is the same business — unless both records carry a
+      // website or phone and they differ (e.g. two branches / unrelated namesakes).
+      const conflict =
+        (domain && byNameCity.normalized_domain && byNameCity.normalized_domain !== domain) ||
+        (normPhone && byNameCity.normalized_phone && byNameCity.normalized_phone !== normPhone);
+      return { company: byNameCity, certain: !conflict, reason: conflict ? 'name_city_conflict' : 'name_city' };
+    }
   }
   if (normAddress) {
+    // Several businesses can share an address (malls, office towers) — flag, don't merge.
     const byAddress = await Company.findOne({ where: { normalized_address: normAddress }, transaction });
-    if (byAddress) return byAddress;
+    if (byAddress) return { company: byAddress, certain: false, reason: 'address_only' };
   }
   if (normName) {
-    // Loosest fallback: same normalized name anywhere — the only tier that predates
-    // this pass, kept as the last resort so pre-existing dedup behavior never regresses.
+    // Same name with no location or identifier in common: different cities often share names.
     const byName = await Company.findOne({ where: { normalized_name: normName }, transaction });
-    if (byName) return byName;
+    if (byName) return { company: byName, certain: false, reason: 'name_only' };
   }
-  return null;
+  return { company: null, certain: false, reason: null };
+}
+
+/** Back-compatible lookup: only a *certain* match (look-alikes return null). */
+async function findMatchingCompany(args = {}) {
+  const m = await matchCompany(args);
+  return m.certain ? m.company : null;
+}
+
+/** Record that `companyId` was kept separate from a look-alike, for admin review. Idempotent. */
+async function recordPossibleDuplicate(companyId, match, { transaction } = {}) {
+  if (!match?.company || match.certain || match.company.id === companyId) return null;
+  const { DuplicateReview } = require('../models');
+  const [row] = await DuplicateReview.findOrCreate({
+    where: { company_id: companyId, candidate_company_id: match.company.id },
+    defaults: { reason: match.reason },
+    transaction,
+  });
+  return row;
 }
 
 /** Recompute + persist a company's dedup keys from its current fields (+ an optional phone). */
@@ -111,4 +144,4 @@ async function syncDedupKeys(company, { transaction, phone } = {}) {
   return company;
 }
 
-module.exports = { normalizeDomain, normalizePhone, normalizeName, normalizeAddress, findMatchingCompany, syncDedupKeys };
+module.exports = { normalizeDomain, normalizePhone, normalizeName, normalizeAddress, matchCompany, findMatchingCompany, recordPossibleDuplicate, syncDedupKeys };

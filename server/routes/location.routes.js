@@ -27,5 +27,6 @@ router.post(
 );
 router.patch('/:id', manage, validate({ is_active: { type: 'boolean' }, cascade: { type: 'boolean' } }), asyncHandler(ctrl.update));
 router.delete('/:id', manage, asyncHandler(ctrl.remove));
+router.post('/:id/discover-localities', manage, asyncHandler(ctrl.discoverLocalities));
 
 module.exports = router;

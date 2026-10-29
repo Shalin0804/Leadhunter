@@ -104,8 +104,11 @@ function tagsForIndustry(industry) {
   return INDUSTRY_TAGS[key] || INDUSTRY_TAGS[key.replace(/s$/, '')] || ['office=company']; // generic fallback
 }
 
-function buildOverpassQuery(box, tagFilters, limit) {
-  const bbox = `${box.south},${box.west},${box.north},${box.east}`;
+function buildOverpassQuery(box, tagFilters, limit, geo) {
+  // A radius search uses Overpass's circle filter; otherwise the geocoded bounding box.
+  const bbox = geo
+    ? `around:${Math.round(geo.radiusKm * 1000)},${geo.latitude},${geo.longitude}`
+    : `${box.south},${box.west},${box.north},${box.east}`;
   const clauses = tagFilters
     .map((tf) => {
       const [k, v] = tf.split('=');
@@ -165,10 +168,10 @@ class OsmBusinessProvider {
    * @param {{ location: string, industry: string, limit?: number }} params
    * @returns {{ items: object[], apiCallsUsed: number, geocodedAs: string }}
    */
-  async searchBusinesses({ location, industry, limit = 40 }) {
-    const box = await geocode(location);
+  async searchBusinesses({ location, industry, limit = 40, geo = null }) {
+    const box = geo ? { displayName: `${location} (within ${geo.radiusKm} km)` } : await geocode(location);
     const tagFilters = tagsForIndustry(industry);
-    const query = buildOverpassQuery(box, tagFilters, limit);
+    const query = buildOverpassQuery(box, tagFilters, limit, geo);
 
     let lastError;
     for (const url of OVERPASS_URLS) {
@@ -191,7 +194,7 @@ class OsmBusinessProvider {
         // eslint-disable-next-line no-await-in-loop
         const data = await res.json();
         const items = (data.elements || []).map(elementToCanonical).filter((c) => c.company_name);
-        return { items, apiCallsUsed: 2, geocodedAs: box.displayName }; // 1 geocode + 1 overpass call
+        return { items, apiCallsUsed: geo ? 1 : 2, geocodedAs: box.displayName }; // (1 geocode +) 1 overpass call
       } catch (e) {
         lastError = e;
       } finally {
@@ -202,5 +205,31 @@ class OsmBusinessProvider {
   }
 }
 
+/**
+ * Run one Overpass query through the same mirrors, throttle and User-Agent as business
+ * discovery (shared fair-use budget). Used by the OSM locality import.
+ */
+async function overpass(query) {
+  let lastError;
+  for (const url of OVERPASS_URLS) {
+    // eslint-disable-next-line no-await-in-loop
+    await throttleOverpass();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain', 'User-Agent': USER_AGENT }, body: query, signal: controller.signal });
+      if (res.ok) return await res.json(); // eslint-disable-line no-await-in-loop
+      lastError = new Error(`Overpass query failed at ${url} (${res.status})`);
+    } catch (e) {
+      lastError = e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error('All Overpass mirrors failed');
+}
+
 module.exports = OsmBusinessProvider;
 module.exports.INDUSTRY_TAGS = INDUSTRY_TAGS;
+module.exports.overpass = overpass;

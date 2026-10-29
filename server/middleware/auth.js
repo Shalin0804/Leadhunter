@@ -6,7 +6,8 @@ const ApiError = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/http');
 
 const signToken = (user) =>
-  jwt.sign({ sub: user.id, email: user.email, role: user.role }, config.jwt.secret, {
+  // iat_ms: exact issue time, so logout/password-change revocation isn't limited to 1-second iat.
+  jwt.sign({ sub: user.id, email: user.email, role: user.role, iat_ms: Date.now() }, config.jwt.secret, {
     expiresIn: config.jwt.expiresIn,
   });
 
@@ -28,8 +29,10 @@ const authenticate = asyncHandler(async (req, res, next) => {
   // so a deactivation or role change takes effect on the very next request.
   const user = await User.findByPk(payload.sub);
   if (!user || !user.is_active) throw ApiError.unauthorized('Account not found or inactive');
-  // Sessions issued before the last password change are revoked.
-  if (user.password_changed_at && payload.iat * 1000 < user.password_changed_at.getTime() - 1000) {
+  // Sessions issued before the last password change or logout are revoked server-side.
+  const cutoff = Math.max(user.password_changed_at?.getTime() || 0, user.sessions_revoked_at?.getTime() || 0);
+  const revoked = payload.iat_ms ? payload.iat_ms <= cutoff : payload.iat * 1000 < cutoff - 1000; // legacy tokens: second precision
+  if (cutoff && revoked) {
     throw ApiError.unauthorized('Session expired — please sign in again');
   }
 

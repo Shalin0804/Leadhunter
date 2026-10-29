@@ -27,6 +27,9 @@ const AuditLog = require('./AuditLog')(sequelize);
 const LeadAssignment = require('./LeadAssignment')(sequelize);
 const Location = require('./Location')(sequelize);
 const LocationImportJob = require('./LocationImportJob')(sequelize);
+const BusinessCategory = require('./BusinessCategory')(sequelize);
+const DiscoveryJob = require('./DiscoveryJob')(sequelize);
+const DuplicateReview = require('./DuplicateReview')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -135,6 +138,14 @@ Location.hasMany(Location, { as: 'children', foreignKey: 'parent_id', constraint
 Location.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id', constraints: false });
 LocationImportJob.belongsTo(User, { as: 'startedBy', foreignKey: 'started_by_user_id', constraints: false });
 
+BusinessCategory.belongsTo(BusinessCategory, { as: 'parent', foreignKey: 'parent_id', constraints: false });
+DiscoveryJob.belongsTo(Location, { as: 'location', foreignKey: 'location_id', constraints: false });
+DiscoveryJob.belongsTo(BusinessCategory, { as: 'category', foreignKey: 'business_category_id', constraints: false });
+SearchRun.belongsTo(Location, { as: 'location', foreignKey: 'location_id', constraints: false });
+SearchRun.belongsTo(BusinessCategory, { as: 'category', foreignKey: 'business_category_id', constraints: false });
+DuplicateReview.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+DuplicateReview.belongsTo(Company, { as: 'candidate', foreignKey: 'candidate_company_id', constraints: false });
+
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
@@ -174,6 +185,9 @@ const db = {
   LeadAssignment,
   Location,
   LocationImportJob,
+  BusinessCategory,
+  DiscoveryJob,
+  DuplicateReview,
 };
 
 module.exports = db;

@@ -26,6 +26,7 @@ router.use('/users', require('./user.routes'));
 router.use('/audit', require('./audit.routes'));
 router.use('/locations', require('./location.routes'));
 router.use('/lead-discovery', require('./leadDiscovery.routes'));
+router.use('/contacts', require('./contact.routes'));
 router.use('/companies', require('./company.routes'));
 router.use('/discovery', discovery, require('./discovery.routes'));
 router.use('/leads', require('./lead.routes'));

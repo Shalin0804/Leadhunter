@@ -59,12 +59,15 @@ async function download(url, { attempts = 4 } = {}) {
 
 const lines = (nodeStream) => readline.createInterface({ input: nodeStream, crlfDelay: Infinity });
 
-const geonamesSource = {
+const DATASETS = ['cities500', 'cities1000', 'cities5000', 'cities15000'];
+
+const geonamesSourceFor = (dataset = DATASET) => ({
   name: 'geonames',
-  dataset: DATASET,
+  dataset,
   coverageNote:
-    `GeoNames ${DATASET}: populated places with population >= ${DATASET.replace('cities', '')} and administrative seats; ` +
-    'neighbourhoods only where GeoNames records them (feature PPLX). Villages and smaller localities are not included.',
+    `GeoNames ${dataset}: populated places with population >= ${dataset.replace('cities', '')} and administrative seats; ` +
+    'neighbourhoods only where GeoNames records them (feature PPLX). Villages and smaller localities are not included — ' +
+    'use "Add localities from OpenStreetMap" on a city for those.',
   async countryLines() {
     const res = await download(`${BASE}/countryInfo.txt`);
     return lines(Readable.fromWeb(res.body));
@@ -75,16 +78,18 @@ const geonamesSource = {
   },
   async placeLines() {
     const unzipper = require('unzipper');
-    const res = await download(`${BASE}/${DATASET}.zip`);
-    return lines(Readable.fromWeb(res.body).pipe(unzipper.ParseOne(new RegExp(`${DATASET}\\.txt$`))));
+    const res = await download(`${BASE}/${dataset}.zip`);
+    return lines(Readable.fromWeb(res.body).pipe(unzipper.ParseOne(new RegExp(`${dataset}\\.txt$`))));
   },
-};
+});
+const geonamesSource = geonamesSourceFor(DATASET);
 
 /* ---------------- Countries ---------------- */
 
 let countryCache = null;
 async function listCountries(source = geonamesSource) {
-  if (countryCache && Date.now() - countryCache.at < 24 * 3600 * 1000 && source === geonamesSource) return countryCache.list;
+  const real = source.name === 'geonames' && !source.dataset?.startsWith('fixture');
+  if (countryCache && Date.now() - countryCache.at < 24 * 3600 * 1000 && real) return countryCache.list;
   const list = [];
   for await (const line of await source.countryLines()) {
     if (!line || line.startsWith('#')) continue;
@@ -92,7 +97,7 @@ async function listCountries(source = geonamesSource) {
     if (c[0]?.length === 2) list.push({ code: c[0], name: c[4], capital: c[5] || null, population: Number(c[7]) || null, geonameid: c[16] || null });
   }
   list.sort((a, b) => a.name.localeCompare(b.name));
-  if (source === geonamesSource) countryCache = { at: Date.now(), list };
+  if (real) countryCache = { at: Date.now(), list };
   return list;
 }
 
@@ -147,10 +152,11 @@ async function actorFor(job) {
   return job.started_by_user_id ? User.findByPk(job.started_by_user_id) : null;
 }
 
-async function runJob(jobId, source = geonamesSource) {
+async function runJob(jobId, sourceArg) {
   if (running.has(jobId)) return;
   running.add(jobId);
   const job = await LocationImportJob.findByPk(jobId);
+  const source = sourceArg || geonamesSourceFor(DATASETS.includes(job.dataset) ? job.dataset : DATASET);
   const cc = job.country_code;
   const counts = { imported: job.imported, updated: job.updated, skipped_existing: job.skipped_existing };
   const cp = job.checkpoint || {};
@@ -268,7 +274,9 @@ function haversineKm(a, b) {
 }
 
 /** Create a job and run it in the background (the HTTP request returns immediately). */
-async function startImport({ countryCode, userId }, source = geonamesSource) {
+async function startImport({ countryCode, userId, dataset }, sourceArg) {
+  if (dataset && !DATASETS.includes(dataset)) throw Object.assign(new Error(`dataset must be one of ${DATASETS.join(', ')}`), { statusCode: 400 });
+  const source = sourceArg || geonamesSourceFor(dataset || DATASET);
   const cc = String(countryCode || '').toUpperCase();
   if (!/^[A-Z]{2}$/.test(cc)) throw Object.assign(new Error('country_code must be a 2-letter ISO code'), { statusCode: 400 });
   const active = await LocationImportJob.findOne({ where: { country_code: cc, status: { [Op.in]: ['queued', 'running'] } } });
@@ -281,7 +289,7 @@ async function startImport({ countryCode, userId }, source = geonamesSource) {
 }
 
 /** Resume a failed/cancelled/stale job from its checkpoint. */
-async function resumeJob(jobId, source = geonamesSource) {
+async function resumeJob(jobId, source) {
   const job = await LocationImportJob.findByPk(jobId);
   if (!job) throw Object.assign(new Error('Import job not found'), { statusCode: 404 });
   if (job.status === 'completed') throw Object.assign(new Error('Job already completed — start a new sync instead'), { statusCode: 400 });
@@ -301,4 +309,4 @@ async function resumeStaleJobs() {
   return stale.length;
 }
 
-module.exports = { listCountries, startImport, resumeJob, resumeStaleJobs, runJob, normalize, geonamesSource, haversineKm, _running: running };
+module.exports = { listCountries, startImport, resumeJob, resumeStaleJobs, runJob, normalize, geonamesSource, geonamesSourceFor, DATASETS, haversineKm, _running: running };

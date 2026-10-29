@@ -190,23 +190,68 @@ There is **no public sign-up**. After the first deploy with this release:
 5. Contact values are masked for every role except Main Admin; employees click **Reveal**, and each reveal is logged (field names only, never the value).
 
 Tracking starts at the first event after deploy — the Activity Log states that date and never back-fills history.
-On Postgres the migration installs a trigger that makes `audit_logs` append-only. Optional hardening for Supabase:
-`npm run migrate -- --enable-rls` enables Row Level Security on every `public` table with no policies, which closes
-Supabase's auto-generated REST API to the anon/authenticated keys. The API is unaffected only while it connects as the
-table owner (the default `postgres` user) — check that before enabling.
+
+### Sessions
+Login tokens are bearer JWTs kept in the browser's localStorage (never passwords). Every request re-reads the user, so
+deactivation or a role change applies on the next request. **Sign out revokes the token on the server** (all of that
+user's sessions end), as does a password reset. No cookies are used, so cross-site request forgery can't ride on an
+ambient credential; the remaining risk is XSS, mitigated by React's escaping (no raw-HTML rendering anywhere) and the
+Content-Security-Policy / X-Frame-Options / nosniff headers set in `client/vercel.json`. If the API is ever served from a
+domain other than `*.onrender.com`, add it to `connect-src` in that CSP.
+
+### Database access and Row Level Security
+The browser never connects to the database — only the API does, with `DATABASE_URL`, and every API route checks the
+user's permissions and record scope first.
+
+* **Postgres / Supabase:** `npm run migrate` enables RLS (with no policies) on every `public` table, but only after it
+  verifies that the connected role owns every table or has BYPASSRLS — those roles are exempt from RLS, so the API keeps
+  working, while Supabase's `anon` / `authenticated` REST roles are denied everything. Supabase's `postgres` role (the
+  normal `DATABASE_URL` user) owns the tables and has BYPASSRLS. If the check fails, nothing changes and the log says why.
+  Disable with `npm run migrate -- --no-rls`. The migration also installs a trigger that makes `audit_logs` append-only
+  (only the retention purge may delete).
+* **MySQL / TiDB:** there is no RLS and no trigger; access control is entirely in the API, and `audit_logs` is
+  append-only at the application level. Keep the database user's credentials private to the API.
+
+**Unused Supabase project:** if production moved to TiDB but the old Supabase project still holds data, either delete
+that project or run `npm run migrate` against it once (with its `DATABASE_URL`) to switch RLS on, so its REST API can't
+read the old copies of leads and contacts.
+
+### Before migrating production
+Take a backup first: on Supabase, Database → Backups (or `pg_dump`); on TiDB Cloud, check that automatic backups are
+on, or export with `mysqldump`/Dumpling. The migration is additive (new tables and nullable columns, one VARCHAR
+widened) and re-runnable; it never drops or rewrites data.
 
 ## 8. Geographic locations and location-based discovery
 
-**Location Management** (Main Admin) → pick a country → **Discover locations**. The server downloads GeoNames
-(`countryInfo.txt`, `admin1CodesASCII.txt`, `cities1000.zip`, CC BY 4.0 — attribution required) and imports
-country → states → cities/towns (population ≥ 1,000) → neighbourhoods where GeoNames has them. Villages and many small
-areas are not covered. The import runs in the background, checkpoints every batch, resumes automatically after a
-restart (or click **Resume**), and never duplicates rows. Deactivate any location to hide it (and optionally its
-children) from employees.
+**Location Management** (Main Admin) → pick a country and a coverage level → **Discover locations**. The server
+downloads GeoNames (`countryInfo.txt`, `admin1CodesASCII.txt`, `citiesN.zip`; CC BY 4.0 — attribution required) and
+imports country → states → towns above the chosen population → neighbourhoods where GeoNames has them. Runs in the
+background, checkpoints every batch, resumes after a restart (or **Resume**), and never duplicates rows.
 
-**Lead Discovery** (Main Admin and Managers by default) → choose an approved location and up to 5 business
-categories → the existing discovery providers, scoring, dedup and enrichment run as usual. A manager's run assigns the
-new leads to them. Business categories are edited via `PUT /api/lead-discovery/categories` (Main Admin).
+**Smaller places** (villages, suburbs, neighbourhoods): on a city row click **+ OSM**. One bounded OpenStreetMap
+Overpass query (≤ 25 km around the city, same throttled mirrors as business discovery) adds named localities
+(© OpenStreetMap contributors, ODbL — stored on each row). A place already present from GeoNames within 2 km under the
+same name is skipped, never merged by name alone. Coverage depends on what OSM volunteers have mapped.
+
+**Lead Discovery** (Main Admin and Managers) → approved location → up to 5 business categories → optional radius,
+max leads, minimum score. A manager's run assigns the new leads to them. Each SearchRun stores the location id,
+coordinates, radius, category and the exact parameters used.
+
+Radius handling per provider (reported on every run): OpenStreetMap and Yelp filter natively (Yelp max 40 km); Serper
+results are filtered afterwards by their coordinates; providers that return no coordinates (LeadIQ) can't honour a
+radius and the run says so. Google Places is not used unless you configure it.
+
+**Business Categories** (Main Admin): Lead Discovery → Business Categories. Name, search keyword, description,
+industry group, priority, opportunity types, enabled/disabled.
+
+**Scheduled Discovery** (Main Admin): location × category jobs with a frequency and max results. Jobs live in the
+database. They run when the API checks every 15 minutes while awake, and on each external-cron call to
+`/api/automation/run-scheduled` (section 5) — on a sleeping free instance they run late, not on the exact minute.
+Runs never overlap; a job interrupted by a restart is re-queued after 2 h; failures back off. Free-text locations in
+Automation Settings keep running unchanged; the page shows which of them map to location records.
+
+**Duplicates:** a business is merged only on a strong match (website domain, phone, provider id, CIN, or same name in
+the same city with no conflicting phone/website). Look-alikes are kept separate and listed on the Dashboard for review.
 
 ## Environment variable reference
 
@@ -235,8 +280,9 @@ new leads to them. Business categories are edited via `PUT /api/lead-discovery/c
 | `AUDIT_RETENTION_DAYS` | Render | optional — delete audit rows older than this (unset = keep forever) |
 | `CONTACT_REVEAL_LIMIT_PER_HOUR` | Render | default `120` — per-employee contact reveals per hour |
 | `DISPLAY_TIMEZONE` | Render | default `Asia/Kolkata` — timezone for activity-log dates |
-| `GEONAMES_DATASET` | Render | default `cities1000` — `cities500` / `cities5000` / `cities15000` change the population cut-off |
+| `GEONAMES_DATASET` | Render | default `cities1000` — default coverage when an import doesn't choose one |
 | `LOCATION_IMPORT_BATCH` | Render | default `500` — rows per checkpointed batch |
+| `DISCOVERY_JOBS_PER_TICK` | Render | default `3` — scheduled location jobs run per scheduler tick / cron call |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 
 ## Redeploys & data

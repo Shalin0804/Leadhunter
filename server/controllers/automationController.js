@@ -1,7 +1,7 @@
 const config = require('../config/config');
 const { getSettings, updateSettings } = require('../services/automationSettingsService');
 const { runFullDiscovery, runForTarget } = require('../services/discoveryOrchestrator');
-const { reschedule, isRunning, withRunLock } = require('../jobs/automationScheduler');
+const { reschedule, isRunning, withRunLock, scheduledWork } = require('../jobs/automationScheduler');
 const { history } = require('../services/apiUsageService');
 const { SearchRun, LeadSource, Lead, Company, sequelize } = require('../models');
 const monitoring = require('../services/monitoringService');
@@ -78,7 +78,7 @@ exports.runScheduled = async (req, res) => {
   checkTriggerSecret(req);
   if (isRunning()) return ok(res, { message: 'A run is already in progress — skipped.' });
 
-  withRunLock('external', () => runFullDiscovery({ triggeredBy: 'external' })).catch((e) =>
+  withRunLock('external', () => scheduledWork('external')).catch((e) =>
     console.error('[automation] external run failed:', e.message)
   );
   return ok(res, { message: 'Discovery run started.' }, 202);

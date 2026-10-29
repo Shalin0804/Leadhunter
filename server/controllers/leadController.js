@@ -69,6 +69,83 @@ function buildLeadWhere(q) {
   return where;
 }
 
+// Evidence-based opportunity filters: each maps to signals the detector actually recorded.
+const OPPORTUNITY_SIGNALS = {
+  website: ['NO_WEBSITE', 'BROKEN_WEBSITE', 'OUTDATED_WEBSITE'],
+  booking: ['ONLINE_BOOKING_GAP', 'APPOINTMENT_GAP', 'ONLINE_ORDERING_GAP'],
+  enquiry: ['CONTACT_GAP'],
+  ecommerce: ['ECOMMERCE_OPPORTUNITY'],
+  custom_software: ['EXPANSION', 'NEW_LOCATION', 'HIRING'],
+};
+
+/** Filters that need sub-selects (signals, website audits, verified contacts). */
+async function evidenceFilters(q) {
+  const and = [];
+  const companyIdsWhere = async (Model, where) =>
+    ({ company_id: { [Op.in]: (await Model.findAll({ where, attributes: ['company_id'], raw: true })).map((r) => r.company_id) } });
+  if (OPPORTUNITY_SIGNALS[q.opportunity]) and.push(await companyIdsWhere(DetectedSignal, { signal_type: { [Op.in]: OPPORTUNITY_SIGNALS[q.opportunity] } }));
+  if (q.website_review === 'true') {
+    and.push(await companyIdsWhere(CompanyWebsite, { [Op.or]: [{ status: { [Op.in]: ['broken', 'inaccessible', 'down', 'parked'] } }, { health: { [Op.in]: ['poor', 'outdated'] } }] }));
+  }
+  if (q.verified_email === 'true') and.push(await companyIdsWhere(CompanyContact, { type: 'email', verification_status: 'VERIFIED' }));
+  if (q.verified_phone === 'true') and.push(await companyIdsWhere(CompanyContact, { type: 'phone', verification_status: 'VERIFIED' }));
+  if (q.quality === 'high') and.push({ lead_score: { [Op.gte]: 70 } });
+  const upd = {};
+  if (q.updated_from) upd[Op.gte] = new Date(q.updated_from);
+  if (q.updated_to) upd[/^\d{4}-\d{2}-\d{2}$/.test(q.updated_to) ? Op.lt : Op.lte] = /^\d{4}-\d{2}-\d{2}$/.test(q.updated_to) ? new Date(new Date(q.updated_to).getTime() + 86400000) : new Date(q.updated_to);
+  if (Object.getOwnPropertySymbols(upd).length) and.push({ updated_at: upd });
+  return and;
+}
+
+/**
+ * Transparent score explanation from the latest stored LeadScore. Confidence reflects
+ * how much of the score rests on checked evidence vs. inference — it is not a probability.
+ */
+function explainScore(lead) {
+  const latest = lead.scoreHistory?.[0];
+  if (!latest) return null;
+  const company = lead.company || {};
+  const site = company.websites?.[0];
+  const day = 86400000;
+  const fresh = (d) => d && Date.now() - new Date(d).getTime() < 30 * day;
+  const verified = (company.contacts || []).filter((c) => c.verification_status === 'VERIFIED').map((c) => c.type);
+  const signals = company.detectedSignals || [];
+  const basis = [];
+  let points = 0;
+  if (site?.last_checked_at && fresh(site.last_checked_at)) {
+    points += 1;
+    basis.push(`Website checked ${Math.round((Date.now() - new Date(site.last_checked_at)) / day)} day(s) ago (status: ${site.status})`);
+  } else if (company.has_website) basis.push('Website not re-checked in the last 30 days');
+  else basis.push('No website found by discovery — not proof the business has none');
+  if (verified.length) {
+    points += 1;
+    basis.push(`Verified contact: ${[...new Set(verified)].join(', ')}`);
+  } else basis.push('No contact detail has been verified');
+  const evidenced = signals.filter((s) => s.evidence || s.signal_description);
+  if (evidenced.length) {
+    points += 1;
+    basis.push(`${evidenced.length} detected signal(s) with recorded evidence`);
+  }
+  // CSV/manual companies have no discovery or enrichment date — fall back to the record's own update.
+  const refreshed = company.last_discovered_at || company.enriched_at || company.updated_at;
+  if (fresh(refreshed)) {
+    points += 1;
+    basis.push('Business data refreshed in the last 30 days');
+  } else basis.push(refreshed ? 'Business data older than 30 days' : 'No refresh date recorded');
+  return {
+    score: latest.score,
+    temperature: latest.temperature,
+    model_version: latest.model_version,
+    scored_at: latest.created_at,
+    breakdown: latest.breakdown,
+    reasons: latest.reasons,
+    missing_assets: latest.missing_assets,
+    confidence: points >= 3 ? 'high' : points >= 2 ? 'medium' : 'low',
+    confidence_basis: basis,
+    note: 'Opportunities are inferred from observed signals — potential needs, not confirmed requirements.',
+  };
+}
+
 function companyWhere(q) {
   const cw = {};
   if (q.industry) cw.industry = { [likeOp]: `%${q.industry}%` };
@@ -100,7 +177,7 @@ exports.list = async (req, res) => {
   }
 
   if (req.query.mine === 'true') req.query.assigned_user_id = req.user.id;
-  const where = { [Op.and]: [buildLeadWhere(req.query), await access.leadScope(req.user)] };
+  const where = { [Op.and]: [buildLeadWhere(req.query), await access.leadScope(req.user), ...(await evidenceFilters(req.query))] };
   const cw = companyWhere(req.query);
 
   const sortable = ['lead_score', 'created_at', 'next_follow_up_at', 'status', 'estimated_value'];
@@ -152,7 +229,7 @@ exports.list = async (req, res) => {
 };
 
 exports.exportCsv = async (req, res) => {
-  const where = { [Op.and]: [buildLeadWhere(req.query), await access.leadScope(req.user)] };
+  const where = { [Op.and]: [buildLeadWhere(req.query), await access.leadScope(req.user), ...(await evidenceFilters(req.query))] };
   const cw = companyWhere(req.query);
   const rows = await Lead.findAll({
     where,
@@ -286,7 +363,7 @@ exports.get = async (req, res) => {
     metadata: { status: lead.status, contact_status: lead.contact_status },
   });
 
-  return ok(res, { lead: access.maskLead(req.user, lead), activities, tasks, notes, signals: access.maskSignals(req.user, signals), assignments });
+  return ok(res, { lead: access.maskLead(req.user, lead), activities, tasks, notes, signals: access.maskSignals(req.user, signals), assignments, score_explanation: explainScore(lead) });
 };
 
 exports.createFromCompany = async (req, res) => {

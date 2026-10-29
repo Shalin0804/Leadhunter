@@ -264,9 +264,11 @@ test('11. existing CRM records are untouched by location work', async () => {
 });
 
 test('only the Main Admin edits business categories', async () => {
-  assert.equal((await call('PUT', '/lead-discovery/categories', tok.manager, { categories: [{ label: 'X' }] })).status, 403);
-  const r = await call('PUT', '/lead-discovery/categories', tok.admin, { categories: [{ label: 'Hotels', keyword: 'hotels', key: 'hotels' }, { label: 'Gyms', keyword: 'gym', enabled: false }] });
-  assert.equal(r.status, 200);
+  assert.equal((await call('POST', '/lead-discovery/categories', tok.manager, { name: 'Gyms' })).status, 403);
+  const created = await call('POST', '/lead-discovery/categories', tok.admin, { name: 'Gyms', keyword: 'gym' });
+  assert.equal(created.status, 201);
+  await call('PATCH', `/lead-discovery/categories/${created.body.data.category.id}`, tok.admin, { is_enabled: false });
   const opts = await call('GET', '/lead-discovery/options', tok.manager);
-  assert.deepEqual(opts.body.data.categories.map((c) => c.key), ['hotels']);
+  assert.ok(opts.body.data.categories.some((c) => c.key === 'hotels'));
+  assert.ok(!opts.body.data.categories.some((c) => c.key === 'gyms'));
 });

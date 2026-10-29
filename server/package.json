@@ -18,7 +18,8 @@
     "test:rbac": "node --test tests/rbac.test.js",
     "create-admin": "node scripts/createAdmin.js",
     "test:locations": "node --test tests/locations.test.js",
-    "test:all": "node --test tests/"
+    "test:all": "node --test tests/",
+    "test:leadgen": "node --test tests/leadgen.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

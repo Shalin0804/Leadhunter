@@ -381,3 +381,6 @@ table.data tbody tr:hover { background: var(--surface-2); }
 }
 .link-btn { background: none; border: none; padding: 0; color: var(--primary); cursor: pointer; font: inherit; text-align: left; }
 .link-btn:hover { text-decoration: underline; }
+.picker-list { border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 220px; overflow-y: auto; margin-top: 4px; background: var(--surface); }
+.picker-item { display: block; width: 100%; text-align: left; padding: 7px 10px; background: none; border: none; border-bottom: 1px solid var(--border); cursor: pointer; font: inherit; }
+.picker-item:hover { background: var(--surface-2); }

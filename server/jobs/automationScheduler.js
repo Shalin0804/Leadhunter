@@ -64,8 +64,31 @@ async function withRunLock(triggeredBy, task) {
   return result;
 }
 
+// Free-text settings targets first (unchanged behaviour), then any due location jobs.
+async function scheduledWork(triggeredBy) {
+  const full = await runFullDiscovery({ triggeredBy });
+  const locationJobs = await require('../services/discoveryJobService').runDueJobs({ triggeredBy });
+  return { ...full, locationJobs };
+}
+
 async function fire(triggeredBy = 'scheduled') {
-  return withRunLock(triggeredBy, () => runFullDiscovery({ triggeredBy }));
+  return withRunLock(triggeredBy, () => scheduledWork(triggeredBy));
+}
+
+// Location jobs have their own frequencies, so check for due ones every 15 minutes while
+// the process is awake (an external cron covers a sleeping free-tier instance).
+let jobTicker = null;
+function startJobTicker() {
+  if (jobTicker || process.env.NODE_ENV === 'test') return;
+  jobTicker = setInterval(async () => {
+    try {
+      const svc = require('../services/discoveryJobService');
+      if (!running && (await svc.hasDueJobs())) await withRunLock('scheduled', () => svc.runDueJobs({ triggeredBy: 'scheduled' }));
+    } catch (err) {
+      console.error('[automation] location job tick failed:', err.message);
+    }
+  }, 15 * 60 * 1000);
+  jobTicker.unref();
 }
 
 /**
@@ -103,6 +126,7 @@ function nextRunEstimate(settings) {
 
 /** (Re)build the cron job from current settings. Safe to call any time settings change. */
 async function reschedule() {
+  startJobTicker();
   if (currentTask) {
     currentTask.stop();
     currentTask = null;
@@ -124,4 +148,4 @@ async function reschedule() {
   console.log(`[automation] scheduler active: "${expr}" (${settings.schedule})`);
 }
 
-module.exports = { reschedule, fire, withRunLock, isRunning: () => running, nextRunEstimate };
+module.exports = { reschedule, fire, scheduledWork, withRunLock, isRunning: () => running, nextRunEstimate };

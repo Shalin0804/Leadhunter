@@ -37,8 +37,10 @@ exports.login = async (req, res) => {
 
 exports.me = async (req, res) => ok(res, session(req.user));
 
-// Stateless JWT — logout is a client-side token discard; we record that it was requested.
+// Logout revokes the token server-side: every JWT this user holds that was issued before
+// now stops working (signing out ends the user's sessions on all devices).
 exports.logout = async (req, res) => {
+  await req.user.update({ sessions_revoked_at: new Date() });
   await audit.record(req, { action: 'auth.logout', resourceType: 'user', resourceId: req.user.id });
   return ok(res, { message: 'Logged out' });
 };

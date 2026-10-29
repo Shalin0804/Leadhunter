@@ -24,6 +24,9 @@ import {
   FiSettings,
   FiCompass,
   FiMap,
+  FiTag,
+  FiClock,
+  FiBookOpen,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -38,6 +41,7 @@ const NAV = [
       { to: '/leads', label: 'All Leads', icon: <FiTarget />, perm: 'leads.view', end: true },
       { to: '/my-leads', label: 'My Leads', icon: <FiUser />, perm: 'leads.view' },
       { to: '/lead-discovery', label: 'Lead Discovery', icon: <FiCompass />, perm: 'discovery.run' },
+      { to: '/contacts', label: 'Contacts', icon: <FiBookOpen />, perm: 'leads.view' },
       { to: '/pipeline', label: 'Pipeline', icon: <FiColumns />, perm: 'leads.view' },
       { to: '/tasks', label: 'Tasks & Follow-ups', icon: <FiCheckSquare />, perm: 'leads.view' },
       { to: '/notes', label: 'Notes', icon: <FiFileText />, perm: 'leads.view' },
@@ -47,6 +51,8 @@ const NAV = [
     section: 'Lead Discovery',
     items: [
       { to: '/discovery', label: 'Companies', icon: <FiSearch />, perm: 'discovery.use' },
+      { to: '/discovery-jobs', label: 'Scheduled Discovery', icon: <FiClock />, perm: 'discovery.use' },
+      { to: '/categories', label: 'Business Categories', icon: <FiTag />, perm: 'settings.manage' },
       { to: '/automation', label: 'Automatic Lead Gen', icon: <FiZap />, perm: 'discovery.use' },
       { to: '/leads/automatic', label: 'Automatic Leads', icon: <FiCpu />, perm: 'discovery.use' },
       { to: '/explorium', label: 'Explorium Leads', icon: <FiDatabase />, perm: 'discovery.use' },
