@@ -90,6 +90,7 @@ exports.exportXlsx = async (req, res) => {
       // Once bytes are on the wire a JSON error is impossible — abort so the client sees a failed download.
       if (res.headersSent) return res.destroy(err);
       res.removeHeader('Content-Disposition');
+      res.removeHeader('Content-Type');
       throw new ApiError(500, 'Could not generate the Excel file. Please try again.');
     }
     await recordExport(req.user, parsed, { status: 'SUCCESS', row_count: rows });

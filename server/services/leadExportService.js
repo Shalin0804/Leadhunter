@@ -455,6 +455,21 @@ async function writeWorkbook(req, stream, { users = {}, exportedBy, now = new Da
   const fmtDate = makeDateFormatter(req.timezone);
   const { where, companyWhere } = buildQuery(req);
 
+  // Keyset pagination: stable, gap-free and duplicate-free even if leads are added mid-export.
+  const fetchBatch = async (lastId) => {
+    const leads = await Lead.findAll({
+      where: { [Op.and]: [where, { id: { [Op.gt]: lastId } }] },
+      include: [companyInclude(companyWhere), { model: User, as: 'assignedUser', attributes: ['id', 'name'] }],
+      order: [['id', 'ASC']],
+      limit: BATCH_SIZE,
+    });
+    const related = leads.length && needs.size ? await loadRelations(leads, needs) : () => ({});
+    return { leads, related };
+  };
+  // Load the first batch before the writer emits any bytes, so a DB error here
+  // still reaches the client as a JSON error instead of a truncated file.
+  let batch = await fetchBatch(0);
+
   const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream, useStyles: true, useSharedStrings: false });
   wb.creator = 'LeadHunter CRM';
   wb.created = now;
@@ -476,18 +491,9 @@ async function writeWorkbook(req, stream, { users = {}, exportedBy, now = new Da
   header.commit();
 
   let written = 0;
-  let lastId = 0;
   for (;;) {
-    // Keyset pagination: stable, gap-free and duplicate-free even if leads are added mid-export.
-    const leads = await Lead.findAll({
-      where: { [Op.and]: [where, { id: { [Op.gt]: lastId } }] },
-      include: [companyInclude(companyWhere), { model: User, as: 'assignedUser', attributes: ['id', 'name'] }],
-      order: [['id', 'ASC']],
-      limit: BATCH_SIZE,
-    });
+    const { leads, related } = batch;
     if (!leads.length) break;
-
-    const related = needs.size ? await loadRelations(leads, needs) : () => ({});
     for (const lead of leads) {
       const x = related(lead);
       const values = {};
@@ -498,8 +504,8 @@ async function writeWorkbook(req, stream, { users = {}, exportedBy, now = new Da
       ws.addRow(values).commit();
       written += 1;
     }
-    lastId = leads[leads.length - 1].id;
     if (leads.length < BATCH_SIZE) break;
+    batch = await fetchBatch(leads[leads.length - 1].id);
   }
   ws.commit();
 
