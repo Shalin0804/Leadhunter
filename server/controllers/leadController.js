@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { safeText, evidenceText } = require('../services/leadExportService');
 const {
   Lead,
   Company,
@@ -174,6 +175,13 @@ exports.exportCsv = async (req, res) => {
     lead_score: l.lead_score,
     lead_temperature: l.lead_temperature,
     recommended_service: l.recommended_service || '',
+    // Free text from the AI qualification step — guarded against spreadsheet formula injection.
+    problem: safeText(l.ai_problem) || '',
+    evidence: safeText(evidenceText(l.ai_evidence)) || '',
+    sales_angle: safeText(l.ai_sales_angle) || '',
+    ai_summary: safeText(l.ai_summary) || '',
+    ai_outreach_angle: safeText(l.ai_outreach_angle) || '',
+    ai_recommended_service: l.ai_recommended_service || '',
     estimated_value: l.estimated_value ?? '',
     assigned_to: l.assignedUser?.name || '',
     next_follow_up_at: l.next_follow_up_at ? l.next_follow_up_at.toISOString() : '',

@@ -561,6 +561,7 @@ module.exports = {
   describeRequest,
   writeWorkbook,
   safeText,
+  evidenceText,
   zonedMidnightUtc,
   utcRange,
 };
