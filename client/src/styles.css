@@ -334,3 +334,23 @@ table.data tbody tr:hover { background: var(--surface-2); }
   .def-list { grid-template-columns: 1fr; gap: 2px 0; }
   .def-list dt { margin-top: 8px; }
 }
+
+/* ---- Excel export modal ---- */
+.export-modal section { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.export-modal section:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
+.export-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; }
+.export-grid .export-span { grid-column: 1 / -1; }
+.export-hint { margin: -4px 0 10px; }
+.export-error { color: var(--danger); margin: 6px 0 0; }
+.chip-sm { padding: 3px 10px; font-size: 12px; }
+.export-columns { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 12px; margin-top: 4px; }
+.export-check { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+.export-summary dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+.export-summary dt { color: var(--text-muted); font-weight: 550; }
+.export-summary dd { margin: 0; }
+.spinner-sm { display: inline-block; width: 14px; height: 14px; border-width: 2px; border-color: rgba(255,255,255,0.4); border-top-color: #fff; vertical-align: -2px; }
+@media (max-width: 600px) {
+  .export-summary dl { grid-template-columns: 1fr; gap: 2px; }
+  .export-summary dd { margin-bottom: 6px; }
+}
+.modal-footer { flex-wrap: wrap; }

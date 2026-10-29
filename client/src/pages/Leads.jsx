@@ -6,6 +6,7 @@ import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { ContactLeadModal, RecontactModal } from '../components/contactModals';
+import ExportLeadsModal from '../components/ExportLeadsModal';
 import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
@@ -73,6 +74,24 @@ export default function Leads() {
 
   const { data, loading, error, reload } = useApi(() => leadApi.list(query), [JSON.stringify(query)]);
 
+  // Seed the Excel export with whatever the page is currently filtered by.
+  const exportInitialFilters = useMemo(() => {
+    const list = (v) => (v ? v.split(',') : undefined);
+    return {
+      company_name: get('search') || undefined,
+      status: list(get('status')),
+      contact_status: list(get('contact_status')),
+      lead_temperature: list(get('lead_temperature')),
+      source: list(get('source')),
+      assigned_user_id: get('assigned_user_id') || undefined,
+      industry: get('industry') || undefined,
+      state: get('state') || undefined,
+      min_score: get('min_score') || undefined,
+      follow_up: get('follow_up_due') === 'true' ? 'due' : undefined,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.toString()]);
+
   // One-click pipeline moves for the prospecting queue. Contact history itself
   // (contact_status) never gets touched by anything but an explicit user action —
   // these buttons are that explicit action, same as opening a modal would be.
@@ -93,9 +112,14 @@ export default function Leads() {
           <h1>Leads</h1>
           <p>Qualified opportunities moving through your sales process.</p>
         </div>
-        <button className="btn" onClick={() => leadApi.exportCsv(query).catch((e) => toast.error(e.message))}>
-          <FiDownload /> Export CSV
-        </button>
+        <div className="flex gap-2">
+          <button className="btn" onClick={() => leadApi.exportCsv(query).catch((e) => toast.error(e.message))}>
+            <FiDownload /> Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => setModal({ type: 'export' })}>
+            📊 Export to Excel (.xlsx)
+          </button>
+        </div>
       </div>
 
       <div className="chip-row mb-3">
@@ -303,6 +327,7 @@ export default function Leads() {
       </Card>
 
       <ContactLeadModal open={modal?.type === 'contact'} onClose={() => setModal(null)} leadId={modal?.leadId} onDone={reload} />
+      <ExportLeadsModal open={modal?.type === 'export'} onClose={() => setModal(null)} initialFilters={exportInitialFilters} />
       <RecontactModal open={modal?.type === 'recontact'} onClose={() => setModal(null)} leadId={modal?.leadId} onDone={reload} />
     </div>
   );

@@ -1,11 +1,17 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/leadController');
+const exportCtrl = require('../controllers/leadExportController');
 const { validate } = require('../middleware/validate');
 const { asyncHandler } = require('../utils/http');
 const { Lead } = require('../models');
 
 router.get('/', asyncHandler(ctrl.list));
 router.get('/export', asyncHandler(ctrl.exportCsv));
+// Advanced Excel export (registered before /:id so "export" isn't read as an id).
+router.get('/export/meta', asyncHandler(exportCtrl.meta));
+router.get('/export/history', asyncHandler(exportCtrl.history));
+router.post('/export/preview', asyncHandler(exportCtrl.preview));
+router.post('/export', asyncHandler(exportCtrl.exportXlsx));
 router.get('/:id', asyncHandler(ctrl.get));
 router.post('/', validate({ company_id: { required: true, type: 'integer' } }), asyncHandler(ctrl.createFromCompany));
 router.put('/:id', asyncHandler(ctrl.update));

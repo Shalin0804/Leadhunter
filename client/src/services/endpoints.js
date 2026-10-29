@@ -1,4 +1,4 @@
-import api, { unwrap, downloadFile } from './api';
+import api, { unwrap, downloadFile, downloadPost } from './api';
 
 const qs = (params = {}) => {
   const clean = Object.fromEntries(
@@ -52,6 +52,10 @@ export const leadApi = {
   reanalyzeAI: (id) => unwrap(api.post(`/leads/${id}/ai/reanalyze`)),
   remove: (id) => unwrap(api.delete(`/leads/${id}`)),
   exportCsv: (params) => downloadFile(`/leads/export${qs(params)}`, 'leads.csv'),
+  exportMeta: () => unwrap(api.get('/leads/export/meta')),
+  exportPreview: (body) => unwrap(api.post('/leads/export/preview', body)),
+  exportHistory: () => unwrap(api.get('/leads/export/history')),
+  exportXlsx: (body) => downloadPost('/leads/export', body, 'leads-export.xlsx'),
 };
 
 export const pipelineApi = {
