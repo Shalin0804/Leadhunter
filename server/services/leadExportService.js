@@ -123,6 +123,14 @@ function makeDateFormatter(timeZone) {
 /* Columns — every one maps to a real stored field                     */
 /* ------------------------------------------------------------------ */
 
+// ai_evidence is a JSON list of findings; some MySQL drivers hand it back as a string.
+function evidenceText(v) {
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return v; }
+  }
+  return Array.isArray(v) ? v.filter(Boolean).join('; ') : v;
+}
+
 // `needs` names the batch-loaded relation a column reads, so unselected relations are never queried.
 const COLUMNS = [
   { key: 'lead_id', header: 'Lead ID', width: 9, type: 'number', get: (l) => l.id },
@@ -162,6 +170,11 @@ const COLUMNS = [
   { key: 'ai_qualification', header: 'AI Qualification', width: 18, get: (l) => l.ai_qualification_status },
   { key: 'ai_confidence', header: 'AI Confidence', width: 12, type: 'number', get: (l) => l.ai_confidence },
   { key: 'ai_summary', header: 'AI Business Summary', width: 40, get: (l) => l.ai_summary },
+  { key: 'ai_problem', header: 'Problem', width: 40, get: (l) => l.ai_problem },
+  { key: 'ai_evidence', header: 'Evidence', width: 50, get: (l) => evidenceText(l.ai_evidence) },
+  { key: 'ai_sales_angle', header: 'Sales Angle', width: 40, get: (l) => l.ai_sales_angle },
+  { key: 'ai_outreach_angle', header: 'AI Outreach Angle', width: 40, get: (l) => l.ai_outreach_angle },
+  { key: 'ai_recommended_service', header: 'AI Recommended Service', width: 24, get: (l) => l.ai_recommended_service },
   { key: 'estimated_value', header: 'Estimated Value', width: 14, type: 'number', get: (l) => l.estimated_value },
   { key: 'lost_reason', header: 'Lost Reason', width: 22, get: (l) => l.lost_reason },
   { key: 'created_at', header: 'Created Date', width: 20, type: 'date', get: (l) => l.created_at },

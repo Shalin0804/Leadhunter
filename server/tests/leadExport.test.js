@@ -84,7 +84,7 @@ test.before(async () => {
   // A: Ahmedabad hotel, score 72, created 1 Oct 2026 00:00 IST (= 30 Sep 18:30 UTC)
   ids.a = await makeLead(
     { company_name: 'Ahmedabad Grand Hotel', city: 'Ahmedabad', state: 'Gujarat', industry: 'Hotels', company_category: 'Hospitality', employee_count: 40, has_website: true, website: 'https://grandhotel.example', normalized_domain: 'grandhotel.example' },
-    { lead_score: 72, status: 'NEW', contact_status: 'NOT_CONTACTED', source: 'automation', priority: 'HIGH', lead_temperature: 'WARM', assigned_user_id: agent.id },
+    { lead_score: 72, status: 'NEW', contact_status: 'NOT_CONTACTED', source: 'automation', priority: 'HIGH', lead_temperature: 'WARM', assigned_user_id: agent.id, ai_problem: 'No website', ai_evidence: ['No official website detected', '~12 employees on record'], ai_sales_angle: 'Offer a starter site' },
     at('2026-09-30T18:30:00Z')
   );
   // B: Ahmedabad hotel, score 55 — fails min_score 60
@@ -276,6 +276,9 @@ test('workbook is valid, formatted, and holds the right data', async () => {
   assert.equal(cell('Other Emails'), 'sales@grandhotel.example');
   assert.equal(cell('Phone Number'), '07912345678'); // leading zero kept, stored as text
   assert.equal(typeof cell('Phone Number'), 'string');
+  assert.equal(cell('Problem'), 'No website');
+  assert.equal(cell('Evidence'), 'No official website detected; ~12 employees on record');
+  assert.equal(cell('Sales Angle'), 'Offer a starter site');
   assert.equal(cell('Alternative Phone'), '+91 98765 43210');
   assert.equal(cell('Contact Person'), 'Ravi Patel');
   assert.equal(cell('Detected Signals'), 'OUTDATED_WEBSITE (HIGH); ONLINE_BOOKING_GAP (MEDIUM)');
