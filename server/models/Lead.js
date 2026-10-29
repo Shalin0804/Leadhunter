@@ -137,6 +137,7 @@ module.exports = (sequelize) => {
         { fields: ['lead_score'] },
         { fields: ['lead_temperature'] },
         { fields: ['next_follow_up_at'] },
+        { fields: ['created_at'] }, // Excel export date-range filter
       ],
     }
   );

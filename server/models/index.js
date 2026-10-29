@@ -22,6 +22,7 @@ const Outreach = require('./Outreach')(sequelize);
 const DetectedSignal = require('./DetectedSignal')(sequelize);
 const HermesResearchRun = require('./HermesResearchRun')(sequelize);
 const HermesResearchEvidence = require('./HermesResearchEvidence')(sequelize);
+const LeadExport = require('./LeadExport')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -111,6 +112,9 @@ HermesResearchEvidence.belongsTo(HermesResearchRun, { as: 'researchRun', foreign
 Company.hasMany(HermesResearchEvidence, { as: 'hermesEvidence', foreignKey: 'company_id', onDelete: 'CASCADE' });
 HermesResearchEvidence.belongsTo(Company, { as: 'company', foreignKey: 'company_id' });
 
+// Excel export audit trail
+LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
+
 // Imports
 User.hasMany(CompanyImport, { as: 'imports', foreignKey: 'user_id' });
 CompanyImport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -142,6 +146,7 @@ const db = {
   DetectedSignal,
   HermesResearchRun,
   HermesResearchEvidence,
+  LeadExport,
 };
 
 module.exports = db;

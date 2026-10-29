@@ -13,6 +13,7 @@
     "setup": "node seed/migrate.js && node seed/seed.js",
     "test": "node seed/smoke-test.js",
     "test:monitoring": "node seed/monitoring-check.js",
+    "test:export": "node --test tests/leadExport.test.js",
     "agent:ingest": "node scripts/agentIngest.js"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "csv-parse": "^5.5.6",
     "csv-stringify": "^6.5.1",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
@@ -35,6 +37,7 @@
     "sequelize": "^6.37.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "sqlite3": "^5.1.7"
   }
 }
