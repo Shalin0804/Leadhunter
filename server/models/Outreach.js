@@ -1,6 +1,9 @@
 const { DataTypes } = require('sequelize');
 
-const CHANNELS = ['EMAIL', 'WHATSAPP', 'LINKEDIN', 'PHONE_TALKING_POINTS', 'FOLLOW_UP'];
+const CHANNELS = ['EMAIL', 'WHATSAPP', 'LINKEDIN', 'PHONE_TALKING_POINTS', 'FOLLOW_UP', 'PROPOSAL'];
+// Approval state. Rule-based drafts stay DRAFT (unchanged behaviour); Claude Code agent
+// drafts start PENDING_APPROVAL. Nothing is ever sent by the system in any state.
+const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'];
 
 module.exports = (sequelize) => {
   const Outreach = sequelize.define(
@@ -17,6 +20,11 @@ module.exports = (sequelize) => {
       // The concrete, real facts the message text was built from — never fabricated.
       evidence: { type: DataTypes.JSON, allowNull: true },
       generated_by: { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'rule_based' },
+      status: { type: DataTypes.ENUM(...STATUSES), allowNull: false, defaultValue: 'DRAFT' },
+      reviewed_by_user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      reviewed_at: { type: DataTypes.DATE, allowNull: true },
+      review_note: { type: DataTypes.STRING(500), allowNull: true },
+      agent_task_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     },
     {
       tableName: 'outreach',
@@ -25,7 +33,9 @@ module.exports = (sequelize) => {
   );
 
   Outreach.CHANNELS = CHANNELS;
+  Outreach.STATUSES = STATUSES;
   return Outreach;
 };
 
 module.exports.CHANNELS = CHANNELS;
+module.exports.STATUSES = STATUSES;

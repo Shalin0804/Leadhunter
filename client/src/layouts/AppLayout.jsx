@@ -27,6 +27,7 @@ import {
   FiTag,
   FiClock,
   FiBookOpen,
+  FiCommand,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -76,6 +77,10 @@ const NAV = [
       { to: '/access-history', label: 'Lead Access History', icon: <FiEye />, perm: 'audit.view' },
       { to: '/audit-trail', label: 'Audit Trail', icon: <FiShield />, perm: 'settings.manage' },
     ],
+  },
+  {
+    section: 'AI Agent',
+    items: [{ to: '/ai-agent', label: 'AI Agent', icon: <FiCommand />, perm: 'agent.manage' }],
   },
   {
     section: 'Settings',

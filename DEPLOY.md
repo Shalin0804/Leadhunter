@@ -253,6 +253,124 @@ Automation Settings keep running unchanged; the page shows which of them map to 
 **Duplicates:** a business is merged only on a strong match (website domain, phone, provider id, CIN, or same name in
 the same city with no conflicting phone/website). Look-alikes are kept separate and listed on the Dashboard for review.
 
+## 9. AI Agent (Claude Code over MCP)
+
+The AI Agent lets **Claude Code, running on your own computer with your own Claude login**, work
+on LeadHunter data. There is **no Anthropic API key** anywhere and no paid API usage; Claude's
+work counts against your Claude subscription's normal usage limits.
+
+```
+Claude Code (your PC, your Claude login)
+   │ stdio: Claude Code starts the process itself (.mcp.json)
+server/mcp/leadhunter-mcp.js  ── 31 tools, no database access, heartbeat every 60 s
+   │ HTTPS + agent token (lh_agent_…, only its hash is stored)
+LeadHunter API (Render)  /api/agent/bridge/*  + a short allowlist of existing read routes
+   │ existing services (scoring, website audit, signals, lead status), audit log
+TiDB / MySQL ── agent_tasks · agent_activity · agent_reports · outreach (approval columns) · settings rows
+   ▲
+Admin dashboard (Vercel) → AI Agent page (Main Admin only), refreshes every 15 s
+```
+
+### What the agent can and cannot do
+
+| Can | Cannot |
+|---|---|
+| Read leads, companies, scores, discovery and automation stats | See raw contact values (they are masked for the agent) |
+| Run LeadHunter's own website audit / signal / opportunity analysis (nothing saved) | Delete, export, reveal contacts, manage users or settings |
+| Save research reports, AI lead scores, notes, follow-up reminders | Change a lead's status: it can only **propose**, and an admin approves |
+| Draft cold emails, follow-ups, LinkedIn messages, proposals | **Send** anything: drafts need approval and are sent by a person |
+| Work queued tasks while the admin has pressed Start | Start itself, mint tokens or reach any other route |
+
+Every call the agent makes is logged in the AI Agent **Activity Log**. Admin decisions (start/stop,
+token, task actions, approvals, settings) also go to the audit trail.
+
+### One-time setup (on the computer that runs Claude Code)
+
+1. Install Claude Code and sign in with your Claude account (`claude`, then follow the login prompt).
+   Your usual subscription login is all it needs; do not set `ANTHROPIC_API_KEY`.
+2. Have this repo checked out and `npm --prefix server install` run once (the MCP server uses
+   the server's packages).
+3. Sign in to LeadHunter as the **Main Admin** → **AI Agent → Connection → Issue token**. Copy it
+   (it is shown once).
+4. Add two lines to `server/.env` in your checkout (never commit this file):
+   ```
+   LEADHUNTER_API_URL=https://<your-render-service>.onrender.com/api
+   LEADHUNTER_AGENT_TOKEN=lh_agent_…
+   ```
+5. In a terminal: `cd` into the project folder → `claude`. On first start Claude Code asks whether to
+   enable the project's `leadhunter` MCP server (from `.mcp.json`): approve it. `/mcp` shows it as
+   connected.
+6. Within a minute the AI Agent page shows **Connected**. Press **Start**.
+7. Tell Claude to work: `/leadhunter-agent` once, or `/loop 5m /leadhunter-agent` to keep picking up
+   tasks every 5 minutes while the session is open.
+
+Optional, on the API server (defaults shown): `AGENT_HEARTBEAT_STALE_SECONDS=120`,
+`AGENT_TASK_TIMEOUT_MINUTES=30`, `AGENT_RATE_LIMIT_PER_MIN=120`. Nothing else is needed on Render or Vercel.
+
+### Using it (Main Admin)
+
+- **Overview**: connection, whether the agent is available, current task, counts, enabled modes.
+- **Connection**: live heartbeat status and reason, token issue / rotate / revoke, setup steps.
+- **Task Manager**: queue research, lead analysis, outreach drafts, strategy, competitor or report
+  tasks; pause / resume / cancel / retry; open a task to see its input, result and execution log.
+- **Activity Log**: every tool call and task step; filter by date, type, status, text, lead or company.
+- **Research Reports**: Claude's reports with sources and a confidence score. Claude's lead score is
+  shown next to (never instead of) LeadHunter's rule-based score.
+- **Approvals**: edit, approve or reject outreach drafts (approve = ready for a person to send;
+  nothing is sent), and approve or reject proposed lead status changes.
+- **Analytics**: work per day, outcomes, success rate, average AI score, for any date range.
+- **Settings**: research preferences, target industries and locations, minimum score, daily task
+  limit, schedules (daily or weekly report, automatic research of new leads), enabled modes.
+
+**Start / Pause / Stop:** Start and Resume only work while a session is really connected. Pause and
+Stop stop new tasks being handed out; pending tasks stay queued. A task already running finishes,
+or returns to the queue after its time limit (30 min).
+
+### Limits: when it runs
+
+The agent works **only while Claude Code is open on a computer that is on and online.** When it
+isn't, the page shows Disconnected (immediately if Claude Code closed cleanly, otherwise 2 minutes
+after the last heartbeat), tasks wait in the queue, and work resumes on reconnect. Schedules are
+checked when the agent asks for work, so they also only run while connected.
+
+True 24/7 operation would need Claude Code running unattended on an always-on machine. Whether a
+consumer Claude subscription may be used that way has **not** been verified: check Anthropic's
+current terms first. Using the Anthropic API instead would be paid, and it is deliberately not built in.
+
+### Costs
+
+| Item | Cost |
+|---|---|
+| Claude Code | your existing Claude subscription (agent work uses its normal usage limits) |
+| MCP server | runs on your PC, free |
+| Render / Vercel / TiDB | unchanged. While Claude Code is open, the 60 s heartbeat keeps the free Render instance awake (one always-on instance fits the free plan's monthly hours) |
+| Anthropic API | not used |
+
+### Database changes (applied by `npm run migrate` on deploy)
+
+- New tables: `agent_tasks`, `agent_activity`, `agent_reports`.
+- `outreach`: new columns `status` (existing rows become `DRAFT`, which is their current meaning),
+  `reviewed_by_user_id`, `reviewed_at`, `review_note`, `agent_task_id`; `channel` gains `PROPOSAL`.
+- New `settings` rows: `agent.control`, `agent.heartbeat`, `agent.token`, `agent.config`.
+- Additive only, and safe to re-run. Rehearsed on TiDB against the schema of the deployed commit,
+  including existing outreach rows.
+
+### Testing
+
+`npm --prefix server run test:agent` (25 tests: admin-only access, token scope, masking, heartbeat,
+queue claim race / retry / timeout / recovery, approvals, proposals, reports, analytics, settings,
+schedules, a real MCP stdio round-trip). Run the same suite on a throwaway TiDB with
+`docker run -d --rm -p 4000:4000 pingcap/tidb`, then `TEST_DB_URL=mysql://root@127.0.0.1:4000/test`.
+
+### Founder Skills
+
+`.claude/skills/` also contains nine skills from
+[ognjengt/founder-skills](https://github.com/ognjengt/founder-skills) (MIT, see
+`FOUNDER_SKILLS_LICENSE.txt`): strategic-planning, go-to-market-plan, outreach-specialist,
+competitor-intel, pricing-strategist, linkedin-writer, brand-copywriter, cro-optimization,
+marketing-ideas. They read `FOUNDER_CONTEXT.md` (project root). Use them directly in Claude Code
+(`/outreach-specialist …`), and the agent uses them for outreach, strategy and competitor tasks.
+
 ## Environment variable reference
 
 | Var | Where | Notes |
@@ -284,6 +402,10 @@ the same city with no conflicting phone/website). Look-alikes are kept separate 
 | `LOCATION_IMPORT_BATCH` | Render | default `500` — rows per checkpointed batch |
 | `DISCOVERY_JOBS_PER_TICK` | Render | default `3` — scheduled location jobs run per scheduler tick / cron call |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
+| `AGENT_HEARTBEAT_STALE_SECONDS` | Render | default `120` — AI Agent shows Disconnected after this long without a heartbeat |
+| `AGENT_TASK_TIMEOUT_MINUTES` | Render | default `30` — a claimed agent task returns to the queue after this |
+| `AGENT_RATE_LIMIT_PER_MIN` | Render | default `120` — requests per minute for the agent token |
+| `LEADHUNTER_API_URL` / `LEADHUNTER_AGENT_TOKEN` | your PC (`server/.env`) | read by the MCP server that Claude Code starts; see section 9 |
 
 ## Redeploys & data
 

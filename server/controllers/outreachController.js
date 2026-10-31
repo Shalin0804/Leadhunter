@@ -7,14 +7,19 @@ const { SCORING_INCLUDE } = require('../services/companyService');
 const { Op } = require('sequelize');
 const access = require('../services/accessService');
 const audit = require('../services/auditService');
+const { can } = require('../config/permissions');
 
 exports.list = async (req, res) => {
   const { page, limit, offset } = parsePagination(req.query);
   const where = {};
   if (req.query.lead_id) where.lead_id = req.query.lead_id;
   if (req.query.company_id) where.company_id = req.query.company_id;
+  const and = [];
   const leadIds = await access.accessibleLeadIds(req.user);
-  if (leadIds) where[Op.and] = [{ lead_id: { [Op.in]: leadIds } }];
+  if (leadIds) and.push({ lead_id: { [Op.in]: leadIds } });
+  // Claude Code drafts are internal until a Main Admin approves them (AI Agent > Approvals).
+  if (!can(req.user, 'agent.manage')) and.push({ [Op.or]: [{ generated_by: { [Op.ne]: 'claude_code' } }, { status: 'APPROVED' }] });
+  if (and.length) where[Op.and] = and;
   const { rows, count } = await Outreach.findAndCountAll({ where, order: [['created_at', 'DESC']], limit, offset });
   return ok(res, paginated(rows, count, page, limit));
 };
@@ -27,7 +32,9 @@ exports.generate = async (req, res) => {
     const l = await access.loadAccessibleLead(req.user, lead_id);
     if (l.company_id !== Number(company_id)) throw ApiError.badRequest('lead_id does not belong to company_id');
   }
-  if (!Outreach.CHANNELS.includes(channel)) throw ApiError.badRequest(`channel must be one of: ${Outreach.CHANNELS.join(', ')}`);
+  // PROPOSAL exists for Claude Code drafts only; the rule-based generator has no template for it.
+  const generatorChannels = Outreach.CHANNELS.filter((c) => c !== 'PROPOSAL');
+  if (!generatorChannels.includes(channel)) throw ApiError.badRequest(`channel must be one of: ${generatorChannels.join(', ')}`);
 
   const company = await Company.findByPk(company_id, { include: SCORING_INCLUDE });
   if (!company) throw ApiError.notFound('Company not found');

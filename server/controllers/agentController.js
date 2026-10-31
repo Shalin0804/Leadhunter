@@ -121,14 +121,69 @@ exports.disconnect = async (req, res) => {
 
 exports.bridgeStatus = async (req, res) => {
   const o = await agent.overview();
-  ok(res, { control: o.control, connection: o.connection, available: o.available, tasks: o.tasks });
+  ok(res, { control: o.control, connection: o.connection, available: o.available, tasks: o.tasks, settings: await agent.getConfig() });
 };
 
-exports.claim = async (req, res) => ok(res, await agent.claimNext(session(req)));
+exports.claim = async (req, res) => ok(res, await agent.claimNext(session(req), req.user));
 
 exports.complete = async (req, res) => ok(res, await agent.completeTask(idParam(req), session(req), req.body?.result ?? null));
 
 exports.fail = async (req, res) => {
   if (!req.body?.error) throw ApiError.badRequest('error is required');
   ok(res, await agent.failTask(idParam(req), session(req), req.body.error, { retryable: req.body.retryable !== false }));
+};
+
+/* ---------------- slice (c)/(d): reports, approvals, analytics, settings ---------------- */
+
+const work = require('../services/agentWorkService');
+
+const pageOf = (q, d = 25) => parsePagination(q, { defaultLimit: d });
+
+// admin
+exports.listReports = async (req, res) => {
+  const { page, limit, offset } = pageOf(req.query);
+  const { rows, count } = await work.listReports({ ...req.query, page, limit, offset });
+  ok(res, paginated(rows, count, page, limit));
+};
+exports.getReport = async (req, res) => ok(res, await work.getReport(idParam(req)));
+
+exports.listDrafts = async (req, res) => {
+  const { page, limit, offset } = pageOf(req.query);
+  const { rows, count } = await work.listDrafts({ status: req.query.status, page, limit, offset });
+  ok(res, paginated(rows, count, page, limit));
+};
+exports.editDraft = async (req, res) => {
+  const d = await work.editDraft(idParam(req), req.body || {}, req.user);
+  await audit.record(req, { action: 'agent.draft_edited', resourceType: 'outreach', resourceId: d.id, leadId: d.lead_id, companyId: d.company_id });
+  ok(res, d);
+};
+exports.decideDraft = async (req, res) => {
+  const d = await work.decideDraft(idParam(req), req.params.decision, req.body?.note, req.user);
+  await audit.record(req, { action: `agent.draft_${req.params.decision === 'approve' ? 'approved' : 'rejected'}`, resourceType: 'outreach', resourceId: d.id, leadId: d.lead_id, companyId: d.company_id, metadata: { channel: d.channel } });
+  ok(res, d);
+};
+exports.decideProposal = async (req, res) => {
+  const t = await work.decideProposal(idParam(req), req.params.decision, req.body?.note, req.user, req);
+  await audit.record(req, { action: `agent.proposal_${req.params.decision === 'approve' ? 'approved' : 'rejected'}`, resourceType: 'agent_task', resourceId: t.id, leadId: t.lead_id, companyId: t.company_id });
+  ok(res, t);
+};
+exports.analytics = async (req, res) => ok(res, await work.analytics({ from: req.query.from, to: req.query.to }));
+exports.getConfig = async (req, res) => ok(res, await agent.getConfig());
+exports.updateConfig = async (req, res) => {
+  const c = await agent.updateConfig(req.body, req.user);
+  await audit.record(req, { action: 'agent.settings_updated', resourceType: 'agent', metadata: { fields: Object.keys(req.body || {}).join(',') } });
+  ok(res, c);
+};
+
+// bridge (agent token)
+exports.saveReport = async (req, res) => ok(res, await work.saveReport(req.body, req.user, session(req)), 201);
+exports.createDraft = async (req, res) => ok(res, await work.createDraft(req.body, req.user, session(req)), 201);
+exports.propose = async (req, res) => ok(res, await work.proposeLeadChange(req.body || {}, req.user, session(req)), 201);
+exports.researchCompany = async (req, res) => ok(res, await work.companyAnalysis(req.user, idParam(req), { live: req.query.live === 'true' }));
+exports.researchLead = async (req, res) => ok(res, await work.leadAnalysis(req.user, idParam(req), { live: req.query.live === 'true' }));
+exports.reportData = async (req, res) => ok(res, await work.reportData(req.user, req.query.period));
+exports.bridgeReports = async (req, res) => {
+  const { page, limit, offset } = pageOf(req.query, 10);
+  const { rows, count } = await work.listReports({ kind: req.query.kind, company_id: req.query.company_id, page, limit, offset });
+  ok(res, paginated(rows, count, page, limit));
 };

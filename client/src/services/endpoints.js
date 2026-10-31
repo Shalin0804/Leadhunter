@@ -222,3 +222,25 @@ export const signalApi = {
     return unwrap(api.post('/imports/signals', fd));
   },
 };
+
+// Claude Code AI agent control center (Main Admin only — agent.manage).
+export const agentApi = {
+  overview: () => unwrap(api.get('/agent/overview')),
+  control: (action, body = {}) => unwrap(api.post('/agent/control', { action, ...body })),
+  issueToken: () => unwrap(api.post('/agent/token')),
+  revokeToken: () => unwrap(api.delete('/agent/token')),
+  tasks: (params) => unwrap(api.get(`/agent/tasks${qs(params)}`)),
+  task: (id) => unwrap(api.get(`/agent/tasks/${id}`)),
+  createTask: (body) => unwrap(api.post('/agent/tasks', body)),
+  taskAction: (id, action) => unwrap(api.post(`/agent/tasks/${id}/${action}`)),
+  activity: (params) => unwrap(api.get(`/agent/activity${qs(params)}`)),
+  reports: (params) => unwrap(api.get(`/agent/reports${qs(params)}`)),
+  report: (id) => unwrap(api.get(`/agent/reports/${id}`)),
+  drafts: (params) => unwrap(api.get(`/agent/outreach${qs(params)}`)),
+  editDraft: (id, body) => unwrap(api.put(`/agent/outreach/${id}`, body)),
+  decideDraft: (id, decision, note) => unwrap(api.post(`/agent/outreach/${id}/${decision}`, { note })),
+  decideProposal: (id, decision, note) => unwrap(api.post(`/agent/tasks/${id}/${decision}`, { note })),
+  analytics: (params) => unwrap(api.get(`/agent/analytics${qs(params)}`)),
+  config: () => unwrap(api.get('/agent/config')),
+  updateConfig: (body) => unwrap(api.put('/agent/config', body)),
+};

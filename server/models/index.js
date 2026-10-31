@@ -32,6 +32,7 @@ const DiscoveryJob = require('./DiscoveryJob')(sequelize);
 const DuplicateReview = require('./DuplicateReview')(sequelize);
 const AgentTask = require('./AgentTask')(sequelize);
 const AgentActivity = require('./AgentActivity')(sequelize);
+const AgentReport = require('./AgentReport')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -155,6 +156,10 @@ AgentTask.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id', c
 AgentActivity.belongsTo(AgentTask, { as: 'task', foreignKey: 'task_id', constraints: false });
 AgentActivity.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
 AgentActivity.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+AgentReport.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+AgentReport.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+AgentReport.belongsTo(AgentTask, { as: 'task', foreignKey: 'task_id', constraints: false });
+Outreach.belongsTo(User, { as: 'reviewedBy', foreignKey: 'reviewed_by_user_id', constraints: false });
 
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -200,6 +205,7 @@ const db = {
   DuplicateReview,
   AgentTask,
   AgentActivity,
+  AgentReport,
 };
 
 module.exports = db;

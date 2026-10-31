@@ -29,6 +29,7 @@ import LeadDiscovery from './pages/LeadDiscovery';
 import BusinessCategories from './pages/BusinessCategories';
 import ScheduledDiscovery from './pages/ScheduledDiscovery';
 import Contacts from './pages/Contacts';
+import AIAgent from './pages/AIAgent';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/contacts" element={guard('leads.view', <Contacts />)} />
         <Route path="/locations" element={guard('locations.manage', <LocationManagement />)} />
         <Route path="/admin-settings" element={guard('settings.manage', <AdminSettings />)} />
+        <Route path="/ai-agent" element={guard('agent.manage', <AIAgent />)} />
       </Route>
       <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
     </Routes>
