@@ -13,13 +13,13 @@
  */
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Setting, User, Company, AgentTask, AgentActivity } = require('../models');
+const { sequelize, Setting, User, Company, Lead, AgentTask, AgentActivity } = require('../models');
 const { can } = require('../config/permissions');
 const { scrub } = require('./auditService');
 const access = require('./accessService');
 const ApiError = require('../utils/ApiError');
 
-const KEYS = { control: 'agent.control', heartbeat: 'agent.heartbeat', token: 'agent.token' };
+const KEYS = { control: 'agent.control', heartbeat: 'agent.heartbeat', token: 'agent.token', config: 'agent.config' };
 const TOKEN_PREFIX = 'lh_agent_';
 const STALE_SECONDS = () => parseInt(process.env.AGENT_HEARTBEAT_STALE_SECONDS || '120', 10);
 const LEASE_MINUTES = () => parseInt(process.env.AGENT_TASK_TIMEOUT_MINUTES || '30', 10);
@@ -34,7 +34,66 @@ const TASK_TYPES = {
   competitor_research: { mode: 'competitor', needs: null, label: 'Competitor research' },
   daily_report: { mode: 'reporting', needs: null, label: 'Daily report' },
   weekly_report: { mode: 'reporting', needs: null, label: 'Weekly report' },
+  // Created only by the agent (update_lead_status) and decided by an admin — never claimed.
+  lead_change_proposal: { mode: 'lead_analyst', needs: 'lead', label: 'Lead change proposal for', internal: true },
 };
+
+/* ---------------- admin-configurable agent settings ---------------- */
+
+const CONFIG_DEFAULTS = {
+  research_preferences: '',
+  research_priorities: '',
+  target_industries: [],
+  target_locations: [],
+  min_lead_score: 50,
+  daily_task_limit: 50, // tasks claimed per rolling 24 h
+  schedules: { daily_report: false, weekly_report: false, auto_research_new_leads: false },
+  auto_research_per_day: 10,
+};
+const TEXT_MAX = 2000;
+
+async function getConfig() {
+  const row = await Setting.findOne({ where: { key: KEYS.config } });
+  const v = row?.value || {};
+  return { ...CONFIG_DEFAULTS, ...v, schedules: { ...CONFIG_DEFAULTS.schedules, ...(v.schedules || {}) } };
+}
+
+/** Validates every field; unknown keys are rejected rather than silently stored. */
+async function updateConfig(patch, user) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw ApiError.badRequest('Body must be an object');
+  const next = await getConfig();
+  const bad = (m) => {
+    throw ApiError.badRequest(m);
+  };
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'research_preferences' || k === 'research_priorities') {
+      if (typeof v !== 'string' || v.length > TEXT_MAX) bad(`${k} must be text up to ${TEXT_MAX} characters`);
+      next[k] = v.trim();
+    } else if (k === 'target_industries' || k === 'target_locations') {
+      if (!Array.isArray(v) || v.length > 50 || !v.every((x) => typeof x === 'string' && x.trim() && x.length <= 100)) bad(`${k} must be a list of up to 50 names (100 characters each)`);
+      next[k] = [...new Set(v.map((x) => x.trim()))];
+    } else if (k === 'min_lead_score') {
+      if (!Number.isInteger(v) || v < 0 || v > 100) bad('min_lead_score must be 0-100');
+      next[k] = v;
+    } else if (k === 'daily_task_limit') {
+      if (!Number.isInteger(v) || v < 1 || v > 1000) bad('daily_task_limit must be 1-1000');
+      next[k] = v;
+    } else if (k === 'auto_research_per_day') {
+      if (!Number.isInteger(v) || v < 1 || v > 100) bad('auto_research_per_day must be 1-100');
+      next[k] = v;
+    } else if (k === 'schedules') {
+      if (!v || typeof v !== 'object' || !Object.entries(v).every(([sk, sv]) => sk in CONFIG_DEFAULTS.schedules && typeof sv === 'boolean')) {
+        bad(`schedules accepts true/false for: ${Object.keys(CONFIG_DEFAULTS.schedules).join(', ')}`);
+      }
+      next.schedules = { ...next.schedules, ...v };
+    } else {
+      bad(`Unknown setting: ${k}`);
+    }
+  }
+  await putRow(KEYS.config, next, 'Claude Code agent settings');
+  await logActivity({ type: 'control', action: `Agent settings updated by ${user.name}`, metadata: { fields: Object.keys(patch).join(',') } });
+  return next;
+}
 
 /* ---------------- settings rows ---------------- */
 
@@ -120,8 +179,8 @@ const AGENT_ROUTES = [
   ['GET', /^\/dashboard\/(stats|lead-generation|opportunities|daily-summary|automation-status)(\?|$)/],
   ['POST', /^\/notes$/],
   ['POST', /^\/tasks$/],
-  ['POST', /^\/agent\/bridge\/(heartbeat|disconnect|tasks\/claim|tasks\/\d+\/(complete|fail))$/],
-  ['GET', /^\/agent\/bridge\/status$/],
+  ['POST', /^\/agent\/bridge\/(heartbeat|disconnect|tasks\/claim|tasks\/\d+\/(complete|fail)|reports|outreach|proposals)$/],
+  ['GET', /^\/agent\/bridge\/(status|reports|report-data|research\/(company|lead)\/\d+)(\?|$)/],
 ];
 // Dot segments, encoded separators and backslashes are refused outright, so the regexes
 // above only ever see the literal path Express will route.
@@ -231,8 +290,14 @@ const clean = (t) => (t ? t.get({ plain: true }) : null);
 const activeKey = (type, leadId, companyId, input) =>
   leadId || companyId ? `${type}:${leadId ? `lead:${leadId}` : `company:${companyId}`}` : `${type}:${crypto.createHash('sha1').update(JSON.stringify(input || {})).digest('hex')}`;
 
-async function createTask({ type, priority = 5, leadId = null, companyId = null, title, input = null, maxAttempts = 3 }, user) {
+/**
+ * opts.internal  — allow internal types (lead_change_proposal); never from the admin API.
+ * opts.scheduled — created by the agent's own schedule (created_by_user_id stays null).
+ * opts.status    — initial status (AWAITING_APPROVAL for proposals).
+ */
+async function createTask({ type, priority = 5, leadId = null, companyId = null, title, input = null, maxAttempts = 3 }, user, { internal = false, scheduled = false, status = 'PENDING' } = {}) {
   const def = TASK_TYPES[type];
+  if (def?.internal && !internal) throw ApiError.badRequest(`${type} is created by the agent, not queued manually`);
   if (!def) throw ApiError.badRequest(`type must be one of: ${Object.keys(TASK_TYPES).join(', ')}`);
   if (def.needs === 'lead' && !leadId) throw ApiError.badRequest(`${type} needs a lead_id`);
   if (def.needs === 'company' && !companyId) throw ApiError.badRequest(`${type} needs a company_id`);
@@ -264,10 +329,19 @@ async function createTask({ type, priority = 5, leadId = null, companyId = null,
       title: String(title || defaultTitle).slice(0, 200),
       input,
       max_attempts: m,
-      created_by_user_id: user.id,
+      status,
+      created_by_user_id: scheduled ? null : user.id,
       dedupe_key: activeKey(type, leadId, companyId, input),
     });
-    await logActivity({ type: 'task_created', action: `Task #${task.id} queued: ${task.title}`, taskId: task.id, leadId, companyId, metadata: { type, priority: p } });
+    const verb = status === 'AWAITING_APPROVAL' ? 'awaiting approval' : scheduled ? 'scheduled' : 'queued';
+    await logActivity({
+      type: status === 'AWAITING_APPROVAL' ? 'proposal_created' : 'task_created',
+      action: `Task #${task.id} ${verb}: ${task.title}`,
+      taskId: task.id,
+      leadId,
+      companyId,
+      metadata: { type, priority: p },
+    });
     return clean(task);
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') throw ApiError.conflict('The same task is already queued or running');
@@ -297,11 +371,78 @@ async function reapExpired() {
  * Hand the next eligible task to a session. The conditional UPDATE is the lock:
  * whichever session flips PENDING -> RUNNING first gets it; the other retries the next one.
  */
-async function claimNext(sessionId) {
+/* ---------------- schedules ---------------- */
+
+const TZ = () => process.env.DISPLAY_TIMEZONE || 'Asia/Kolkata';
+const dayKey = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: TZ() }); // YYYY-MM-DD in the business timezone
+function weekKey(d = new Date()) {
+  const [y, m, day] = dayKey(d).split('-').map(Number);
+  const local = new Date(Date.UTC(y, m - 1, day));
+  local.setUTCDate(local.getUTCDate() - ((local.getUTCDay() + 6) % 7)); // back to Monday
+  return local.toISOString().slice(0, 10);
+}
+
+/**
+ * Queue the agent's scheduled work. Runs when the agent asks for work, so only while a
+ * Claude Code session is connected and the agent is running: scheduled tasks only matter
+ * when something can do them, and a sleeping Render instance needs no timer. Idempotent:
+ * each report is created once per day/week (checked by title), and the active-task unique
+ * key stops two concurrent claims from creating a second copy.
+ */
+async function enqueueScheduled(user, config) {
+  const make = async (args) => {
+    try {
+      await createTask(args, user, { scheduled: true });
+    } catch (err) {
+      if (err.statusCode !== 409) console.error('[agent] scheduled task failed:', err.message);
+    }
+  };
+  if (config.schedules.daily_report) {
+    const title = `Daily report ${dayKey()}`;
+    if (!(await AgentTask.count({ where: { type: 'daily_report', title } }))) await make({ type: 'daily_report', title, priority: 3, input: { date: dayKey() } });
+  }
+  if (config.schedules.weekly_report) {
+    const title = `Weekly report (week of ${weekKey()})`;
+    if (!(await AgentTask.count({ where: { type: 'weekly_report', title } }))) await make({ type: 'weekly_report', title, priority: 3, input: { week_of: weekKey() } });
+  }
+  if (config.schedules.auto_research_new_leads) {
+    const since = new Date(Date.now() - 24 * 3600 * 1000);
+    const doneToday = await AgentTask.count({ where: { type: 'research_company', created_by_user_id: null, created_at: { [Op.gte]: since } } });
+    const room = config.auto_research_per_day - doneToday;
+    if (room > 0) {
+      const companyWhere = {};
+      if (config.target_industries.length) companyWhere.industry = { [Op.in]: config.target_industries };
+      if (config.target_locations.length) companyWhere[Op.or] = [{ city: { [Op.in]: config.target_locations } }, { state: { [Op.in]: config.target_locations } }];
+      const already = (await AgentTask.findAll({ where: { type: 'research_company' }, attributes: ['company_id'], raw: true })).map((r) => r.company_id);
+      const leads = await Lead.findAll({
+        where: {
+          lead_score: { [Op.gte]: config.min_lead_score },
+          created_at: { [Op.gte]: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+          ...(already.length ? { company_id: { [Op.notIn]: already } } : {}),
+        },
+        include: [{ model: Company, as: 'company', attributes: ['id'], where: companyWhere }],
+        order: [['lead_score', 'DESC']],
+        limit: room,
+      });
+      for (const l of leads) {
+        // eslint-disable-next-line no-await-in-loop
+        await make({ type: 'research_company', companyId: l.company_id, priority: 6 });
+      }
+    }
+  }
+}
+
+async function claimNext(sessionId, user) {
   if (!sessionId) throw ApiError.badRequest('session_id is required');
   const control = await getControl();
   if (control.state !== 'running') return { task: null, reason: `Agent is ${control.state} — an admin must start it from the AI Agent dashboard.` };
   await reapExpired();
+  const config = await getConfig();
+  const claimed24h = await AgentTask.count({ where: { started_at: { [Op.gte]: new Date(Date.now() - 24 * 3600 * 1000) } } });
+  if (claimed24h >= config.daily_task_limit) {
+    return { task: null, reason: `Daily task limit reached (${config.daily_task_limit} tasks in the last 24 hours). Change it in AI Agent > Settings.` };
+  }
+  if (user) await enqueueScheduled(user, config);
   for (let i = 0; i < 5; i += 1) {
     // eslint-disable-next-line no-await-in-loop
     const next = await AgentTask.findOne({
@@ -380,6 +521,7 @@ async function transitionTask(id, action, user) {
   if (!tr) throw ApiError.badRequest('Unknown task action');
   const task = await AgentTask.findByPk(id);
   if (!task) throw ApiError.notFound('Task not found');
+  if (TASK_TYPES[task.type]?.internal && action !== 'cancel') throw ApiError.conflict('Proposals are approved or rejected, not paused or retried');
   if (!tr.from.includes(task.status)) throw ApiError.conflict(`Cannot ${action} a ${task.status} task`);
   try {
     const [n] = await AgentTask.update(tr.set(task), { where: { id, status: task.status } });
@@ -410,6 +552,7 @@ async function overview() {
   // The heartbeat's task id can lag one interval behind completion, so it must still be RUNNING.
   const current = connection.current_task_id ? await AgentTask.findOne({ where: { id: connection.current_task_id, status: 'RUNNING' }, attributes: ['id', 'title', 'type', 'status'] }) : null;
   const tokenRow = await Setting.findOne({ where: { key: KEYS.token } });
+  const pendingDrafts = await require('../models').Outreach.count({ where: { generated_by: 'claude_code', status: 'PENDING_APPROVAL' } });
   return {
     control,
     connection,
@@ -417,6 +560,7 @@ async function overview() {
     available: control.state === 'running' && connection.connected,
     tasks,
     completed_by_type: completedByType,
+    pending_approvals: { drafts: pendingDrafts, proposals: tasks.AWAITING_APPROVAL, total: pendingDrafts + tasks.AWAITING_APPROVAL },
     current_task: clean(current),
     last_activity: clean(lastActivity),
     token: tokenRow ? { issued_at: tokenRow.value.issued_at, last4: tokenRow.value.last4, user_id: tokenRow.value.user_id } : null,
@@ -445,4 +589,9 @@ module.exports = {
   reapExpired,
   overview,
   logActivity,
+  getConfig,
+  updateConfig,
+  enqueueScheduled,
+  dayKey,
+  CONFIG_DEFAULTS,
 };

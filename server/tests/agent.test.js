@@ -323,6 +323,182 @@ test('a demoted admin\'s token stops working', async () => {
   assert.equal((await a1('GET', '/leads')).status, 200);
 });
 
+/* ---------------- slice (c): reports, outreach approvals, proposals ---------------- */
+
+test('reports: validated, linked to the session\'s own task, admin-only to read', async () => {
+  assert.equal((await a1('POST', '/agent/bridge/reports', { kind: 'company_research', title: 'x', confidence: 50, company_id: ids.company })).status, 400, 'short title');
+  assert.equal((await a1('POST', '/agent/bridge/reports', { kind: 'company_research', title: 'Research ABC', confidence: 50, company_id: ids.company, source_urls: ['javascript:alert(1)'] })).status, 400, 'non-http url');
+  assert.equal((await a1('POST', '/agent/bridge/reports', { kind: 'company_research', title: 'Research ABC', confidence: 50, company_id: ids.company, ai_score: 70 })).status, 400, 'ai_score only on lead_qualification');
+  assert.equal((await a1('POST', '/agent/bridge/reports', { kind: 'company_research', title: 'Research ABC', confidence: 50 })).status, 400, 'needs a record');
+  assert.equal((await a1('POST', '/agent/bridge/reports', { kind: 'company_research', title: 'Research ABC', confidence: 50, company_id: ids.company, task_id: ids.t1 })).status, 409, 'task not running under this session');
+  assert.equal((await call('POST', '/agent/bridge/reports', tok.admin, { kind: 'strategy', title: 'Fake', confidence: 1 })).status, 403, 'browser session cannot write as the agent');
+
+  const r = await a1('POST', '/agent/bridge/reports', {
+    kind: 'company_research',
+    title: 'Research ABC Technologies',
+    summary: 'IT firm with an outdated site.',
+    content: { company_overview: 'Small IT services firm.', potential_software_requirements: ['Booking portal'], recommended_next_action: 'Offer a free audit' },
+    source_urls: ['https://abc.example/about'],
+    confidence: 60,
+    company_id: ids.company,
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  ids.report = r.body.data.id;
+  const q = await a1('POST', '/agent/bridge/reports', { kind: 'lead_qualification', title: 'AI score 72/100', confidence: 55, lead_id: ids.lead, ai_score: 72, content: { lead_qualification: { verdict: '72/100' } } });
+  assert.equal(q.status, 201);
+  assert.equal(q.body.data.company_id, ids.company, 'company resolved from the lead');
+  assert.equal((await Lead.findByPk(ids.lead)).lead_score, (await Lead.findByPk(ids.lead)).lead_score, 'rule-based score untouched');
+
+  const list = await call('GET', '/agent/reports?kind=company_research', tok.admin);
+  assert.equal(list.body.data.items[0].company.company_name, 'ABC Technologies');
+  assert.equal(list.body.data.items[0].content, undefined, 'list omits the heavy content');
+  const one = await call('GET', `/agent/reports/${ids.report}`, tok.admin);
+  assert.deepEqual(one.body.data.source_urls, ['https://abc.example/about']);
+  assert.equal((await call('GET', '/agent/reports', tok.manager)).status, 403);
+});
+
+test('outreach drafts wait for approval, stay hidden from employees until approved, and are never sent', async () => {
+  assert.equal((await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'WHATSAPP', body: 'hi' })).status, 400, 'agent channels only');
+  const d = await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'PROPOSAL', subject: 'Website proposal', body: 'Dear team, ...', evidence: ['Site is not mobile-friendly'] });
+  assert.equal(d.status, 201, JSON.stringify(d.body));
+  assert.equal(d.body.data.status, 'PENDING_APPROVAL');
+  assert.equal(d.body.data.generated_by, 'claude_code');
+  ids.draft = d.body.data.id;
+
+  const bdeView = async () => (await call('GET', `/outreach?lead_id=${ids.lead}`, tok.bde)).body.data.items.map((o) => o.id);
+  assert.ok(!(await bdeView()).includes(ids.draft), 'BDE must not see an unapproved AI draft');
+  assert.ok((await call('GET', `/outreach?lead_id=${ids.lead}`, tok.admin)).body.data.items.some((o) => o.id === ids.draft));
+
+  assert.equal((await call('PUT', `/agent/outreach/${ids.draft}`, tok.admin, { body: 'Dear team, edited.' })).body.data.body, 'Dear team, edited.');
+  assert.equal((await call('POST', `/agent/outreach/${ids.draft}/approve`, tok.manager)).status, 403);
+  const ap = await call('POST', `/agent/outreach/${ids.draft}/approve`, tok.admin, { note: 'Good' });
+  assert.equal(ap.body.data.status, 'APPROVED');
+  assert.equal(ap.body.data.reviewed_by_user_id, u.admin.id);
+  assert.equal((await call('POST', `/agent/outreach/${ids.draft}/approve`, tok.admin)).status, 409, 'no double approval');
+  assert.equal((await call('PUT', `/agent/outreach/${ids.draft}`, tok.admin, { body: 'x' })).status, 409, 'approved drafts are frozen');
+  assert.ok((await bdeView()).includes(ids.draft), 'approved draft now visible to the lead owner');
+
+  const d2 = (await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'EMAIL', subject: 'Hi', body: 'Hello' })).body.data;
+  assert.equal((await call('GET', '/agent/overview', tok.admin)).body.data.pending_approvals.drafts, 1);
+  assert.equal((await call('POST', `/agent/outreach/${d2.id}/reject`, tok.admin, { note: 'Too generic' })).body.data.status, 'REJECTED');
+  assert.ok(await AuditLog.count({ where: { action: 'agent.draft_approved' } }));
+  // The rule-based generator keeps its original channels.
+  assert.equal((await call('POST', '/outreach/generate', tok.admin, { company_id: ids.company, lead_id: ids.lead, channel: 'PROPOSAL' })).status, 400);
+});
+
+test('lead status proposals change nothing until approved, then apply through the normal lead service', async () => {
+  const before = await Lead.findByPk(ids.lead);
+  assert.equal((await a1('POST', '/agent/bridge/proposals', { lead_id: ids.lead, field: 'status', value: 'NOPE', reason: 'because it is good' })).status, 400);
+  assert.equal((await a1('POST', '/agent/bridge/proposals', { lead_id: ids.lead, field: 'status', value: 'QUALIFIED', reason: 'short' })).status, 400);
+  const p = await a1('POST', '/agent/bridge/proposals', { lead_id: ids.lead, field: 'status', value: 'QUALIFIED', reason: 'Strong fit: no booking system, active business.' });
+  assert.equal(p.status, 201, JSON.stringify(p.body));
+  assert.equal(p.body.data.status, 'AWAITING_APPROVAL');
+  assert.equal((await a1('POST', '/agent/bridge/proposals', { lead_id: ids.lead, field: 'status', value: 'QUALIFIED', reason: 'Strong fit: no booking system.' })).status, 409, 'one open proposal per lead');
+  assert.equal((await Lead.findByPk(ids.lead)).status, before.status, 'not applied yet');
+  assert.equal((await call('POST', '/agent/tasks', tok.admin, { type: 'lead_change_proposal', lead_id: ids.lead })).status, 400, 'admins cannot queue proposals as tasks');
+  assert.equal((await a1('POST', '/agent/bridge/tasks/claim')).body.data.task?.type === 'lead_change_proposal', false, 'never claimable');
+
+  const ok = await call('POST', `/agent/tasks/${p.body.data.id}/approve`, tok.admin);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.data.status, 'COMPLETED');
+  assert.equal((await Lead.findByPk(ids.lead)).status, 'QUALIFIED');
+  assert.equal(await db.LeadStatusHistory.count({ where: { lead_id: ids.lead, to_status: 'QUALIFIED' } }), 1, 'status history written');
+  assert.equal((await call('POST', `/agent/tasks/${p.body.data.id}/approve`, tok.admin)).status, 409);
+  assert.equal((await call('POST', `/agent/tasks/${p.body.data.id}/retry`, tok.admin)).status, 409, 'proposals cannot be retried');
+
+  // A proposal for a lead deleted meanwhile is refused and stays open (not silently "done").
+  const tmpCo = await Company.create({ company_name: 'Temp Co', source: 'csv' });
+  const tmpLead = await Lead.create({ company_id: tmpCo.id });
+  const pt = (await a1('POST', '/agent/bridge/proposals', { lead_id: tmpLead.id, field: 'status', value: 'QUALIFIED', reason: 'Temporary lead for the test.' })).body.data;
+  await tmpLead.destroy();
+  assert.equal((await call('POST', `/agent/tasks/${pt.id}/approve`, tok.admin)).status, 404);
+  assert.equal((await AgentTask.findByPk(pt.id)).status, 'AWAITING_APPROVAL');
+  await call('POST', `/agent/tasks/${pt.id}/reject`, tok.admin);
+
+  const p2 = (await a1('POST', '/agent/bridge/proposals', { lead_id: ids.lead, field: 'lead_status', value: 'ARCHIVED', reason: 'Business appears closed per site.' })).body.data;
+  assert.equal((await call('POST', `/agent/tasks/${p2.id}/reject`, tok.admin, { note: 'Still open' })).body.data.status, 'CANCELLED');
+  assert.notEqual((await Lead.findByPk(ids.lead)).lead_status, 'ARCHIVED');
+});
+
+test('research bundles are read-only analysis with contacts masked', async () => {
+  const before = await AuditLog.count();
+  const r = await a1('GET', `/agent/bridge/research/company/${ids.company}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(r.body.data.rule_based.breakdown, 'rule-based breakdown');
+  assert.ok(Array.isArray(r.body.data.opportunities));
+  assert.ok(!JSON.stringify(r.body.data).includes('sales@abc.example'), 'contact value masked');
+  assert.ok(r.body.data.previous_agent_reports.some((x) => x.id === ids.report));
+  // company2 has no website: a live audit answers without any network call.
+  const live = await a1('GET', `/agent/bridge/research/company/${ids.company2}?live=true`);
+  assert.equal(live.body.data.website_audit.status, 'no_website');
+  const lead = await a1('GET', `/agent/bridge/research/lead/${ids.lead}`);
+  assert.ok(lead.body.data.rule_based_qualification);
+  assert.equal(lead.body.data.lead.id, ids.lead);
+  assert.ok((await AuditLog.count()) >= before);
+  assert.equal(await db.DetectedSignal.count({ where: { company_id: ids.company2 } }), 0, 'nothing saved');
+});
+
+/* ---------------- slice (d): report data, analytics, settings, schedules, limits ---------------- */
+
+test('report data for daily / weekly / prospecting', async () => {
+  for (const period of ['daily', 'weekly', 'prospecting']) {
+    const r = await a1('GET', `/agent/bridge/report-data?period=${period}`);
+    assert.equal(r.status, 200, `${period}: ${JSON.stringify(r.body)}`);
+  }
+  assert.equal((await a1('GET', '/agent/bridge/report-data?period=yearly')).status, 400);
+  const p = await a1('GET', '/agent/bridge/report-data?period=prospecting');
+  assert.ok(p.body.data.top_uncontacted_leads.length >= 1);
+});
+
+test('analytics: per-day series and totals from real rows', async () => {
+  const r = await call('GET', '/agent/analytics', tok.admin);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const t = r.body.data.totals;
+  assert.ok(t.companies_researched >= 1);
+  assert.equal(t.outreach_drafts, 2);
+  assert.equal(t.average_ai_score, 72);
+  assert.equal(t.qualified_leads, 1, '72 >= default threshold 50');
+  assert.ok(r.body.data.series.length >= 30);
+  assert.equal(r.body.data.series.reduce((a, d) => a + d.outreach_drafts, 0), 2);
+  assert.equal((await call('GET', '/agent/analytics?from=2026-01-01&to=2020-01-01', tok.admin)).status, 400);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.equal((await call('GET', `/agent/analytics?from=${today}&to=${today}`, tok.admin)).body.data.totals.outreach_drafts, 2, 'a bare end date includes the whole day');
+  assert.equal((await call('GET', '/agent/analytics', tok.manager)).status, 403);
+});
+
+test('settings are validated and audited', async () => {
+  assert.equal((await call('PUT', '/agent/config', tok.admin, { min_lead_score: 150 })).status, 400);
+  assert.equal((await call('PUT', '/agent/config', tok.admin, { target_industries: 'Healthcare' })).status, 400);
+  assert.equal((await call('PUT', '/agent/config', tok.admin, { schedules: { hourly: true } })).status, 400);
+  assert.equal((await call('PUT', '/agent/config', tok.admin, { made_up: 1 })).status, 400);
+  const r = await call('PUT', '/agent/config', tok.admin, { target_industries: ['Healthcare', 'Healthcare', 'Retail'], research_preferences: 'Focus on clinics', min_lead_score: 60 });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.data.target_industries, ['Healthcare', 'Retail']);
+  assert.equal((await a1('GET', '/agent/bridge/status')).body.data.settings.research_preferences, 'Focus on clinics', 'Claude sees the settings');
+  assert.ok(await AuditLog.count({ where: { action: 'agent.settings_updated' } }));
+});
+
+test('schedules queue each daily report once; the daily task limit stops claims', async () => {
+  await a1('POST', '/agent/bridge/heartbeat', {});
+  await call('POST', '/agent/control', tok.admin, { action: 'start' });
+  await call('POST', '/agent/control', tok.admin, { action: 'modes', enabled_modes: ['reporting'] });
+  await call('PUT', '/agent/config', tok.admin, { schedules: { daily_report: true }, daily_task_limit: 1000 });
+  const c = await a1('POST', '/agent/bridge/tasks/claim');
+  assert.match(c.body.data.task?.title || '', /^Daily report \d{4}-\d{2}-\d{2}$/);
+  assert.equal(c.body.data.task.created_by_user_id, null, 'scheduled, not user-created');
+  await a1('POST', `/agent/bridge/tasks/${c.body.data.task.id}/complete`, { result: {} });
+  await a2('POST', '/agent/bridge/tasks/claim');
+  assert.equal(await AgentTask.count({ where: { type: 'daily_report' } }), 1, 'not re-created after completion the same day');
+
+  await call('PUT', '/agent/config', tok.admin, { schedules: { daily_report: false }, daily_task_limit: 1 });
+  await call('POST', '/agent/tasks', tok.admin, { type: 'weekly_report' });
+  const blocked = await a1('POST', '/agent/bridge/tasks/claim');
+  assert.equal(blocked.body.data.task, null);
+  assert.match(blocked.body.data.reason, /Daily task limit reached/);
+  await call('PUT', '/agent/config', tok.admin, { daily_task_limit: 50 });
+  await call('POST', '/agent/control', tok.admin, { action: 'stop' });
+});
+
 test('MCP server: real stdio handshake, tool list, read + write tools, heartbeat', async () => {
   const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
   const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
@@ -338,7 +514,7 @@ test('MCP server: real stdio handshake, tool list, read + write tools, heartbeat
   try {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
-    for (const n of ['get_leads', 'get_lead_details', 'search_leads', 'get_companies', 'get_company_details', 'get_company_contacts', 'get_lead_scores', 'get_search_history', 'get_discovery_statistics', 'get_automation_status', 'add_lead_notes', 'create_followup_task', 'get_next_task', 'complete_task', 'fail_task', 'get_agent_status']) {
+    for (const n of ['get_leads', 'get_lead_details', 'search_leads', 'get_companies', 'get_company_details', 'get_company_contacts', 'get_lead_scores', 'get_search_history', 'get_discovery_statistics', 'get_automation_status', 'add_lead_notes', 'create_followup_task', 'get_next_task', 'complete_task', 'fail_task', 'get_agent_status', 'research_company', 'analyse_company_website', 'analyse_business_opportunity', 'qualify_lead', 'identify_public_business_contacts', 'detect_business_signals', 'find_potential_website_improvements', 'update_lead_status', 'update_lead_score', 'save_research_report', 'create_outreach_draft', 'generate_daily_report', 'generate_weekly_report', 'generate_prospecting_report', 'generate_competitor_report']) {
       assert.ok(names.includes(n), n);
     }
 

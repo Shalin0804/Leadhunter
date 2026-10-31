@@ -130,6 +130,35 @@ async function migrateUsersTable() {
   }
 }
 
+/**
+ * Claude Code agent: outreach approval workflow + PROPOSAL channel. Additive only and
+ * idempotent: existing outreach rows get status DRAFT (their current meaning) and keep
+ * every value; the channel enum only gains a value at the end.
+ */
+async function migrateOutreachTable() {
+  const qi = sequelize.getQueryInterface();
+  const { DataTypes } = require('sequelize');
+  const { Outreach } = require('../models');
+  if (isPostgres) {
+    await sequelize.query(`ALTER TYPE "enum_outreach_channel" ADD VALUE IF NOT EXISTS 'PROPOSAL'`).catch((err) => {
+      if (!/does not exist/i.test(err.message)) throw err;
+    });
+  }
+  const cols = await qi.describeTable('outreach').catch(() => null);
+  if (!cols) return; // fresh DB — sync() creates the full table
+  if (!isPostgres && cols.channel && !/PROPOSAL/.test(cols.channel.type)) {
+    await qi.changeColumn('outreach', 'channel', { type: DataTypes.ENUM(...Outreach.CHANNELS), allowNull: false });
+  }
+  await ensureColumns('outreach', {
+    status: { type: DataTypes.ENUM(...Outreach.STATUSES), allowNull: false, defaultValue: 'DRAFT' },
+    reviewed_by_user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    reviewed_at: { type: DataTypes.DATE, allowNull: true },
+    review_note: { type: DataTypes.STRING(500), allowNull: true },
+    agent_task_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  });
+  console.log('[migrate] outreach table has approval columns (status, reviewed_by_user_id, reviewed_at, review_note, agent_task_id) and PROPOSAL channel');
+}
+
 /** Add any missing columns to an existing table (no-op for a table that doesn't exist yet). */
 async function ensureColumns(table, defs) {
   const qi = sequelize.getQueryInterface();
@@ -210,7 +239,10 @@ async function run() {
     console.log('[migrate] legacy lead_temperature values remapped (HIGH->WARM, NOT_QUALIFIED->LOW)');
   }
 
-  if (tableCount > 0 && !FRESH) await migrateUsersTable();
+  if (tableCount > 0 && !FRESH) {
+    await migrateUsersTable();
+    await migrateOutreachTable();
+  }
 
   if (FRESH) {
     console.log('[migrate] --fresh: dropping and recreating all tables');

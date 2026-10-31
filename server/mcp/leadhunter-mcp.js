@@ -228,6 +228,154 @@ tool(
     api('POST', '/tasks', { body: { lead_id: leadId, title, description, due_date: dueDate, priority, is_follow_up: true }, tool: t })
 );
 
+/* ---------------- research (read-only CRM analysis; you do the public-web research) ---------------- */
+
+const companyAnalysis = (companyId, live, t) => api('GET', `/agent/bridge/research/company/${companyId}`, { query: { live: live ? 'true' : undefined }, tool: t });
+const leadAnalysis = (leadId, live, t) => api('GET', `/agent/bridge/research/lead/${leadId}`, { query: { live: live ? 'true' : undefined }, tool: t });
+
+tool(
+  'research_company',
+  "Start company research: everything LeadHunter knows about the company (profile, stored website audit, rule-based score breakdown, opportunities, signals, previous agent reports). Then verify and extend it on the company's public website, and save the result with save_research_report (kind company_research) citing source URLs.",
+  { company_id: id },
+  ({ company_id: companyId }, t) => companyAnalysis(companyId, false, t)
+);
+
+tool(
+  'analyse_company_website',
+  "Fetch the company's homepage NOW (one page, the same audit discovery uses) and return status, HTTPS, mobile-friendliness, speed, title/meta, detected technologies and feature flags (booking, e-commerce, contact form…). Nothing is saved.",
+  { company_id: id },
+  async ({ company_id: companyId }, t) => {
+    const a = await companyAnalysis(companyId, true, t);
+    return { company: a.company, website_audit: a.website_audit };
+  }
+);
+
+tool(
+  'find_potential_website_improvements',
+  'Live website audit plus the opportunities LeadHunter derives from it (missing booking, e-commerce, mobile issues, outdated site…). Use it to list concrete, verifiable improvements Codefloor IT could offer.',
+  { company_id: id },
+  async ({ company_id: companyId }, t) => {
+    const a = await companyAnalysis(companyId, true, t);
+    return { company: a.company, website_audit: a.website_audit, opportunities: a.opportunities, missing_assets: a.rule_based.missing_assets };
+  }
+);
+
+tool(
+  'detect_business_signals',
+  'Business signals for a company: signals already stored, signals detected now from a live website check, and buying-intent signals captured from permitted channels.',
+  { company_id: id },
+  async ({ company_id: companyId }, t) => {
+    const a = await companyAnalysis(companyId, true, t);
+    return { company: a.company, signals: a.signals };
+  }
+);
+
+tool(
+  'identify_public_business_contacts',
+  "Which contact channels the CRM already has (values masked), plus the company website and social profiles to start from. Find PUBLIC BUSINESS contacts only (company email/phone, named roles listed on the company's own site), never private personal data; record each with its source URL in your report.",
+  { company_id: id },
+  async ({ company_id: companyId }, t) => {
+    const a = await companyAnalysis(companyId, false, t);
+    return { company: a.company, contact_channels: a.contact_channels, socials: a.socials, rules: 'Public business contacts only, each with source_url. No scraping behind logins, no private profiles, respect robots.txt and site terms.' };
+  }
+);
+
+tool(
+  'qualify_lead',
+  "A lead's CRM state plus LeadHunter's rule-based qualification and score breakdown, as the starting point for your own qualification. Save your verdict with update_lead_score (your AI score) or save_research_report (kind lead_qualification).",
+  { lead_id: id },
+  ({ lead_id: leadId }, t) => leadAnalysis(leadId, false, t)
+);
+
+tool(
+  'analyse_business_opportunity',
+  'Opportunity view for a lead or company: rule-based opportunities, score breakdown, missing digital assets and signals. Pass lead_id or company_id.',
+  { lead_id: id.optional(), company_id: id.optional() },
+  async ({ lead_id: leadId, company_id: companyId }, t) => {
+    if (!leadId && !companyId) throw new Error('lead_id or company_id is required');
+    const a = leadId ? await leadAnalysis(leadId, false, t) : await companyAnalysis(companyId, false, t);
+    return { lead: a.lead, company: a.company, opportunities: a.opportunities, rule_based: a.rule_based, signals: a.signals, rule_based_qualification: a.rule_based_qualification };
+  }
+);
+
+/* ---------------- write (reports, drafts and proposals — humans approve) ---------------- */
+
+const reportShape = {
+  kind: z.enum(['company_research', 'lead_qualification', 'strategy', 'competitor', 'daily', 'weekly', 'prospecting']),
+  title: z.string().min(3).max(200),
+  summary: z.string().max(10000).optional(),
+  content: z
+    .object({
+      company_overview: z.string().optional(),
+      business_category: z.string().optional(),
+      potential_software_requirements: z.array(z.string()).optional(),
+      website_observations: z.array(z.string()).optional(),
+      public_business_contacts: z.array(z.object({ name: z.string().optional(), role: z.string().optional(), channel: z.string(), value: z.string(), source_url: z.string().url() })).optional(),
+      business_opportunities: z.array(z.string()).optional(),
+      lead_qualification: z.object({ verdict: z.string(), reasons: z.array(z.string()).optional() }).optional(),
+      recommended_next_action: z.string().optional(),
+    })
+    .passthrough()
+    .optional()
+    .describe('Structured sections; add more keys for strategy/competitor/report content'),
+  source_urls: z.array(z.string().url()).max(100).describe('Every web source you used'),
+  confidence: z.number().int().min(0).max(100),
+  lead_id: id.optional(),
+  company_id: id.optional(),
+  task_id: id.optional().describe('The task you are working on, if any'),
+};
+
+tool(
+  'save_research_report',
+  'Save a report to LeadHunter (visible to the Main Admin under AI Agent → Research Reports). Only real, sourced findings: say "unknown" rather than guess.',
+  reportShape,
+  (a, t) => api('POST', '/agent/bridge/reports', { body: a, tool: t })
+);
+
+tool(
+  'update_lead_score',
+  "Record YOUR 0-100 score for a lead with your reasons, as a lead_qualification report. LeadHunter's rule-based score is never overwritten; admins see both side by side.",
+  { lead_id: id, ai_score: z.number().int().min(0).max(100), reasons: z.array(z.string().min(3)).min(1).max(20), confidence: z.number().int().min(0).max(100), source_urls: z.array(z.string().url()).max(100).optional(), task_id: id.optional() },
+  ({ lead_id: leadId, ai_score: aiScore, reasons, confidence, source_urls: urls, task_id: taskId }, t) =>
+    api('POST', '/agent/bridge/reports', {
+      body: { kind: 'lead_qualification', lead_id: leadId, title: `AI score ${aiScore}/100 for LEAD-${leadId}`, summary: reasons.join('\n'), content: { lead_qualification: { verdict: `${aiScore}/100`, reasons } }, ai_score: aiScore, confidence, source_urls: urls || [], task_id: taskId },
+      tool: t,
+    })
+);
+
+tool(
+  'update_lead_status',
+  "PROPOSE a change to a lead's pipeline status (field=status) or qualification (field=lead_status). It is NOT applied until the Main Admin approves it under AI Agent → Approvals.",
+  { lead_id: id, field: z.enum(['status', 'lead_status']), value: z.string().min(2).max(40), reason: z.string().min(10).max(2000), task_id: id.optional() },
+  (a, t) => api('POST', '/agent/bridge/proposals', { body: a, tool: t })
+);
+
+tool(
+  'create_outreach_draft',
+  'Save a personalised outreach DRAFT (cold email, follow-up, LinkedIn message or business proposal) for admin review. Nothing is ever sent: the admin edits, approves or rejects it, and a person sends approved drafts themselves. Ground every claim in evidence.',
+  {
+    lead_id: id,
+    channel: z.enum(['EMAIL', 'FOLLOW_UP', 'LINKEDIN', 'PROPOSAL']),
+    subject: z.string().max(255).optional(),
+    body: z.string().min(1).max(20000),
+    evidence: z.array(z.string().max(500)).max(30).describe('The real facts the message relies on'),
+    task_id: id.optional(),
+  },
+  (a, t) => api('POST', '/agent/bridge/outreach', { body: a, tool: t })
+);
+
+/* ---------------- reporting (data for you to write the report; save it with save_research_report) ---------------- */
+
+tool('generate_daily_report', 'CRM and agent activity for the last 24 hours (new leads, status changes, discovery runs, agent tasks, drafts, top new leads). Write the report and save it with kind "daily".', {}, (a, t) => api('GET', '/agent/bridge/report-data', { query: { period: 'daily' }, tool: t }));
+tool('generate_weekly_report', 'CRM and agent activity for the last 7 days. Write the report and save it with kind "weekly".', {}, (a, t) => api('GET', '/agent/bridge/report-data', { query: { period: 'weekly' }, tool: t }));
+tool('generate_prospecting_report', 'Top uncontacted leads by score, the industries among them, and the admin\'s targeting settings. Write prospecting priorities and save with kind "prospecting".', {}, (a, t) => api('GET', '/agent/bridge/report-data', { query: { period: 'prospecting' }, tool: t }));
+tool(
+  'generate_competitor_report',
+  "Previous competitor reports and the admin's targeting settings. Research the competitor's PUBLIC website and positioning yourself, then save with kind \"competitor\" and source URLs.",
+  {},
+  async (a, t) => ({ previous_reports: await api('GET', '/agent/bridge/reports', { query: { kind: 'competitor', limit: 10 }, tool: t }), settings: (await api('GET', '/agent/bridge/status', { tool: t })).settings })
+);
+
 /* ---------------- lifecycle ---------------- */
 
 let closing = false;

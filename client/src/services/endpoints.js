@@ -234,4 +234,13 @@ export const agentApi = {
   createTask: (body) => unwrap(api.post('/agent/tasks', body)),
   taskAction: (id, action) => unwrap(api.post(`/agent/tasks/${id}/${action}`)),
   activity: (params) => unwrap(api.get(`/agent/activity${qs(params)}`)),
+  reports: (params) => unwrap(api.get(`/agent/reports${qs(params)}`)),
+  report: (id) => unwrap(api.get(`/agent/reports/${id}`)),
+  drafts: (params) => unwrap(api.get(`/agent/outreach${qs(params)}`)),
+  editDraft: (id, body) => unwrap(api.put(`/agent/outreach/${id}`, body)),
+  decideDraft: (id, decision, note) => unwrap(api.post(`/agent/outreach/${id}/${decision}`, { note })),
+  decideProposal: (id, decision, note) => unwrap(api.post(`/agent/tasks/${id}/${decision}`, { note })),
+  analytics: (params) => unwrap(api.get(`/agent/analytics${qs(params)}`)),
+  config: () => unwrap(api.get('/agent/config')),
+  updateConfig: (body) => unwrap(api.put('/agent/config', body)),
 };
