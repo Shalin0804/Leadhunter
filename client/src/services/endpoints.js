@@ -222,3 +222,16 @@ export const signalApi = {
     return unwrap(api.post('/imports/signals', fd));
   },
 };
+
+// Claude Code AI agent control center (Main Admin only — agent.manage).
+export const agentApi = {
+  overview: () => unwrap(api.get('/agent/overview')),
+  control: (action, body = {}) => unwrap(api.post('/agent/control', { action, ...body })),
+  issueToken: () => unwrap(api.post('/agent/token')),
+  revokeToken: () => unwrap(api.delete('/agent/token')),
+  tasks: (params) => unwrap(api.get(`/agent/tasks${qs(params)}`)),
+  task: (id) => unwrap(api.get(`/agent/tasks/${id}`)),
+  createTask: (body) => unwrap(api.post('/agent/tasks', body)),
+  taskAction: (id, action) => unwrap(api.post(`/agent/tasks/${id}/${action}`)),
+  activity: (params) => unwrap(api.get(`/agent/activity${qs(params)}`)),
+};

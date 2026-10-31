@@ -177,6 +177,7 @@ test('task creation validates input, real records and duplicates', async () => {
   assert.equal(r.status, 201);
   ids.t1 = r.body.data.id;
   assert.equal(r.body.data.mode, 'research');
+  assert.equal(r.body.data.title, 'Research ABC Technologies');
   assert.equal((await call('POST', '/agent/tasks', tok.admin, { type: 'research_company', company_id: ids.company })).status, 409, 'duplicate');
   ids.t2 = (await call('POST', '/agent/tasks', tok.admin, { type: 'analyse_lead', lead_id: ids.lead2, priority: 1 })).body.data.id;
 });
@@ -204,6 +205,11 @@ test('only the owning session can finish a task; completion frees the dedupe key
   assert.equal(r.body.data.status, 'COMPLETED');
   assert.equal(r.body.data.dedupe_key, null);
   assert.ok(r.body.data.duration_ms >= 0);
+  // A stale heartbeat task id never shows a finished task as "current".
+  await owner('POST', '/agent/bridge/heartbeat', { current_task_id: ids.t1 });
+  const ov = (await call('GET', '/agent/overview', tok.admin)).body.data;
+  assert.equal(ov.current_task, null);
+  assert.equal(ov.completed_by_type.research_company, 1);
   assert.equal((await call('POST', '/agent/tasks', tok.admin, { type: 'research_company', company_id: ids.company })).status, 201, 'same work can be queued again later');
   await call('POST', `/agent/tasks/${(await AgentTask.max('id'))}/cancel`, tok.admin);
 });

@@ -13,7 +13,7 @@
  */
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Setting, User, AgentTask, AgentActivity } = require('../models');
+const { sequelize, Setting, User, Company, AgentTask, AgentActivity } = require('../models');
 const { can } = require('../config/permissions');
 const { scrub } = require('./auditService');
 const access = require('./accessService');
@@ -27,13 +27,13 @@ const LEASE_MINUTES = () => parseInt(process.env.AGENT_TASK_TIMEOUT_MINUTES || '
 const MODES = AgentTask.MODES;
 // type -> { mode, needs }. `needs` is the record the task must point at.
 const TASK_TYPES = {
-  research_company: { mode: 'research', needs: 'company' },
-  analyse_lead: { mode: 'lead_analyst', needs: 'lead' },
-  generate_outreach: { mode: 'sales', needs: 'lead' },
-  strategy_review: { mode: 'strategy', needs: null },
-  competitor_research: { mode: 'competitor', needs: null },
-  daily_report: { mode: 'reporting', needs: null },
-  weekly_report: { mode: 'reporting', needs: null },
+  research_company: { mode: 'research', needs: 'company', label: 'Research' },
+  analyse_lead: { mode: 'lead_analyst', needs: 'lead', label: 'Analyse lead' },
+  generate_outreach: { mode: 'sales', needs: 'lead', label: 'Draft outreach for' },
+  strategy_review: { mode: 'strategy', needs: null, label: 'Strategy review' },
+  competitor_research: { mode: 'competitor', needs: null, label: 'Competitor research' },
+  daily_report: { mode: 'reporting', needs: null, label: 'Daily report' },
+  weekly_report: { mode: 'reporting', needs: null, label: 'Weekly report' },
 };
 
 /* ---------------- settings rows ---------------- */
@@ -249,6 +249,10 @@ async function createTask({ type, priority = 5, leadId = null, companyId = null,
   } else if (companyId) {
     await access.assertCompanyAccess(user, companyId);
   }
+  // Default title names the record, e.g. "Research Sunrise Dental Clinic".
+  let subject = input?.competitor || '';
+  if (companyId) subject = (await Company.findByPk(companyId, { attributes: ['company_name'] }))?.company_name || `company #${companyId}`;
+  const defaultTitle = [def.label, subject].filter(Boolean).join(' ');
 
   try {
     const task = await AgentTask.create({
@@ -257,7 +261,7 @@ async function createTask({ type, priority = 5, leadId = null, companyId = null,
       priority: p,
       lead_id: leadId,
       company_id: companyId,
-      title: String(title || type.replace(/_/g, ' ')).slice(0, 200),
+      title: String(title || defaultTitle).slice(0, 200),
       input,
       max_attempts: m,
       created_by_user_id: user.id,
@@ -390,16 +394,21 @@ async function transitionTask(id, action, user) {
 
 async function overview() {
   await reapExpired();
-  const [control, connection, counts, lastActivity] = await Promise.all([
+  const count = [sequelize.fn('COUNT', sequelize.col('id')), 'n'];
+  const [control, connection, counts, done, lastActivity] = await Promise.all([
     getControl(),
     getConnection(),
-    AgentTask.findAll({ attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'n']], group: ['status'], raw: true }),
+    AgentTask.findAll({ attributes: ['status', count], group: ['status'], raw: true }),
+    AgentTask.findAll({ where: { status: 'COMPLETED' }, attributes: ['type', count], group: ['type'], raw: true }),
     AgentActivity.findOne({ order: [['id', 'DESC']] }),
   ]);
   const tasks = Object.fromEntries(AgentTask.STATUSES.map((s) => [s, 0]));
   for (const c of counts) tasks[c.status] = Number(c.n);
+  const completedByType = Object.fromEntries(Object.keys(TASK_TYPES).map((t) => [t, 0]));
+  for (const c of done) completedByType[c.type] = Number(c.n);
   // Only a connected session has a "current task"; a RUNNING row with no session is just waiting for its lease to expire.
-  const current = connection.current_task_id ? await AgentTask.findByPk(connection.current_task_id, { attributes: ['id', 'title', 'type', 'status'] }) : null;
+  // The heartbeat's task id can lag one interval behind completion, so it must still be RUNNING.
+  const current = connection.current_task_id ? await AgentTask.findOne({ where: { id: connection.current_task_id, status: 'RUNNING' }, attributes: ['id', 'title', 'type', 'status'] }) : null;
   const tokenRow = await Setting.findOne({ where: { key: KEYS.token } });
   return {
     control,
@@ -407,6 +416,7 @@ async function overview() {
     // "available" = an admin started it AND a session is actually connected right now.
     available: control.state === 'running' && connection.connected,
     tasks,
+    completed_by_type: completedByType,
     current_task: clean(current),
     last_activity: clean(lastActivity),
     token: tokenRow ? { issued_at: tokenRow.value.issued_at, last4: tokenRow.value.last4, user_id: tokenRow.value.user_id } : null,
