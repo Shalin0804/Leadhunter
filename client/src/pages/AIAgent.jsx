@@ -365,6 +365,7 @@ function NewTask({ control, onClose, onSaved }) {
 
   const save = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
       await agentApi.createTask({
@@ -395,7 +396,7 @@ function NewTask({ control, onClose, onSaved }) {
           </select>
           {modeOff && <div className="text-warning text-sm mt-2"><FiAlertTriangle /> {MODE_LABELS[def.mode]} mode is disabled. The task will wait until you enable it.</div>}
         </div>
-        {def.needs && <RecordPicker kind={def.needs} value={record} onChange={setRecord} />}
+        {def.needs && <RecordPicker key={def.needs} kind={def.needs} value={record} onChange={setRecord} />}
         {type === 'strategy_review' && (
           <div className="field"><label htmlFor="nt-topic">What should the agent look at?</label><textarea id="nt-topic" className="input" rows={3} maxLength={2000} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Which industries in our leads respond best to booking-system offers?" /></div>
         )}
