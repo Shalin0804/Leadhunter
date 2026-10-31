@@ -18,10 +18,13 @@
     "test:rbac": "node --test tests/rbac.test.js",
     "create-admin": "node scripts/createAdmin.js",
     "test:locations": "node --test tests/locations.test.js",
-    "test:all": "node --test tests/",
+    "test:all": "node --test \"tests/*.test.js\"",
+    "test:agent": "node --test tests/agent.test.js",
+    "mcp": "node mcp/leadhunter-mcp.js",
     "test:leadgen": "node --test tests/leadgen.test.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "bcrypt": "^5.1.1",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
@@ -39,7 +42,8 @@
     "openai": "^4.104.0",
     "pg": "^8.13.1",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.3"
+    "sequelize": "^6.37.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "nodemon": "^3.1.4",

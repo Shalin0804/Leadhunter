@@ -30,6 +30,7 @@ const PERMISSIONS = {
   'audit.export': 'Export activity logs to CSV',
   'performance.view': 'Team performance reports within your scope',
   'settings.manage': 'Admin settings',
+  'agent.manage': 'AI Agent control center: Claude Code connection, tasks, activity, reports and approvals',
 };
 
 const ALL = Object.keys(PERMISSIONS);
@@ -41,7 +42,12 @@ const MATRIX = {
   viewer: ['leads.view', 'audit.view'],
 };
 
-const permissionsFor = (role) => MATRIX[role] || [];
-const can = (user, permission) => !!user && user.is_active !== false && permissionsFor(user.role).includes(permission);
+// Requests made with a Claude Code agent token act as the admin who issued it, minus
+// these: the agent never sees raw contact values or manages people, settings or exports.
+const AGENT_DENIED = ['contacts.reveal', 'contacts.view_unmasked', 'users.manage', 'settings.manage', 'leads.delete', 'leads.export', 'audit.export', 'locations.manage'];
 
-module.exports = { ROLES, ROLE_LABELS, PERMISSIONS, MATRIX, permissionsFor, can };
+const permissionsFor = (role) => MATRIX[role] || [];
+const can = (user, permission) =>
+  !!user && user.is_active !== false && permissionsFor(user.role).includes(permission) && !(user.is_agent && AGENT_DENIED.includes(permission));
+
+module.exports = { ROLES, ROLE_LABELS, PERMISSIONS, MATRIX, AGENT_DENIED, permissionsFor, can };

@@ -4,6 +4,7 @@ const { User } = require('../models');
 const { can } = require('../config/permissions');
 const ApiError = require('../utils/ApiError');
 const { asyncHandler } = require('../utils/http');
+const agent = require('../services/agentService');
 
 const signToken = (user) =>
   // iat_ms: exact issue time, so logout/password-change revocation isn't limited to 1-second iat.
@@ -17,6 +18,8 @@ const authenticate = asyncHandler(async (req, res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) throw ApiError.unauthorized('Authentication token missing');
+
+  if (agent.isAgentToken(token)) return authenticateAgent(req, res, next, token);
 
   let payload;
   try {
@@ -44,6 +47,51 @@ const authenticate = asyncHandler(async (req, res, next) => {
   req.user = user;
   next();
 });
+
+/**
+ * Claude Code agent token (MCP server). Acts as the admin who issued it, minus
+ * permissions.AGENT_DENIED, and only on agentService's route allowlist. Every call
+ * lands in the agent activity feed with its outcome and duration.
+ */
+async function authenticateAgent(req, res, next, token) {
+  const user = await agent.userForToken(token);
+  if (!user) throw ApiError.unauthorized('Invalid or revoked agent token');
+  const sessionId = String(req.get('x-agent-session') || '').slice(0, 64) || null;
+  const tool = String(req.get('x-agent-tool') || '').slice(0, 60) || null;
+  const path = req.originalUrl.replace(/^\/api/, '');
+  if (!agent.agentRouteAllowed(req.method, path)) {
+    await agent.logActivity({ type: 'tool_call', tool, status: 'denied', action: `${req.method} ${path.split('?')[0]}`, error: 'Route not available to the agent', sessionId });
+    throw ApiError.forbidden('This endpoint is not available to the Claude Code agent');
+  }
+  user.is_agent = true; // permissions.can() drops AGENT_DENIED for this request
+  req.user = user;
+  req.agent = { sessionId, tool };
+
+  const started = Date.now();
+  let failure = null;
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (body && body.success === false) failure = body.message;
+    return json(body);
+  };
+  res.on('finish', () => {
+    if (path.startsWith('/agent/bridge/heartbeat')) return; // once a minute; shown as "last heartbeat" instead
+    const id = (re, field) => Number((path.match(re) || [])[1]) || Number(req.body?.[field]) || null;
+    agent.logActivity({
+      type: 'tool_call',
+      tool,
+      status: res.statusCode < 400 ? 'success' : res.statusCode === 403 ? 'denied' : 'failure',
+      action: `${req.method} ${path.split('?')[0]}`,
+      durationMs: Date.now() - started,
+      error: failure,
+      leadId: id(/^\/leads\/(\d+)/, 'lead_id'),
+      companyId: id(/^\/companies\/(\d+)/, 'company_id'),
+      taskId: Number((path.match(/^\/agent\/bridge\/tasks\/(\d+)/) || [])[1]) || null,
+      sessionId,
+    });
+  });
+  next();
+}
 
 const requireRole = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
