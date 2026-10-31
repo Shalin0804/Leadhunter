@@ -30,6 +30,8 @@ const LocationImportJob = require('./LocationImportJob')(sequelize);
 const BusinessCategory = require('./BusinessCategory')(sequelize);
 const DiscoveryJob = require('./DiscoveryJob')(sequelize);
 const DuplicateReview = require('./DuplicateReview')(sequelize);
+const AgentTask = require('./AgentTask')(sequelize);
+const AgentActivity = require('./AgentActivity')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -146,6 +148,14 @@ SearchRun.belongsTo(BusinessCategory, { as: 'category', foreignKey: 'business_ca
 DuplicateReview.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
 DuplicateReview.belongsTo(Company, { as: 'candidate', foreignKey: 'candidate_company_id', constraints: false });
 
+// Claude Code agent queue + activity feed (no FK constraints: rows outlive deleted leads/companies)
+AgentTask.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+AgentTask.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+AgentTask.belongsTo(User, { as: 'createdBy', foreignKey: 'created_by_user_id', constraints: false });
+AgentActivity.belongsTo(AgentTask, { as: 'task', foreignKey: 'task_id', constraints: false });
+AgentActivity.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+AgentActivity.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
@@ -188,6 +198,8 @@ const db = {
   BusinessCategory,
   DiscoveryJob,
   DuplicateReview,
+  AgentTask,
+  AgentActivity,
 };
 
 module.exports = db;

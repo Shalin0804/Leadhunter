@@ -2,6 +2,8 @@ const router = require('express').Router();
 const { authenticate, requirePermission } = require('../middleware/auth');
 const automationController = require('../controllers/automationController');
 const { asyncHandler } = require('../utils/http');
+const { rateLimit } = require('../middleware/rateLimit');
+const { isAgentToken } = require('../services/agentService');
 
 router.get('/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 // Readiness: also checks the database. 503 with no internals on failure.
@@ -15,7 +17,11 @@ router.post('/automation/run-scheduled', asyncHandler(automationController.runSc
 // Same secret. An external cron hits this to detect overdue automation (an asleep process can't).
 router.get('/automation/heartbeat', asyncHandler(automationController.heartbeat));
 
-// Everything below requires a valid JWT.
+// Claude Code agent token: its own budget, so a runaway agent loop can't starve anything.
+const agentLimit = rateLimit({ windowMs: 60 * 1000, max: parseInt(process.env.AGENT_RATE_LIMIT_PER_MIN || '120', 10), keyFn: () => 'agent', message: 'Agent rate limit reached — slow down' });
+router.use((req, res, next) => (isAgentToken((req.headers.authorization || '').slice(7)) ? agentLimit(req, res, next) : next()));
+
+// Everything below requires a valid JWT (or the agent token — see middleware/auth.js).
 router.use(authenticate);
 
 // Record-level scoping (which leads/companies) is enforced in the controllers via
@@ -43,5 +49,6 @@ router.use('/hermes', require('./hermes.routes'));
 router.use('/ai', discovery, require('./ai.routes'));
 router.use('/leadiq', discovery, require('./leadiq.routes'));
 router.use('/explorium', discovery, require('./explorium.routes'));
+router.use('/agent', requirePermission('agent.manage'), require('./agent.routes'));
 
 module.exports = router;
