@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/agentController');
+const sales = require('../controllers/salesController');
 const { asyncHandler } = require('../utils/http');
 const ApiError = require('../utils/ApiError');
 
@@ -20,6 +21,8 @@ bridge.post('/reports', asyncHandler(ctrl.saveReport));
 bridge.get('/reports', asyncHandler(ctrl.bridgeReports));
 bridge.post('/outreach', asyncHandler(ctrl.createDraft));
 bridge.post('/proposals', asyncHandler(ctrl.propose));
+bridge.post('/playbooks', asyncHandler(sales.savePlaybook));
+bridge.get('/playbooks/:leadId', asyncHandler(sales.playbookContext));
 bridge.get('/research/company/:id', asyncHandler(ctrl.researchCompany));
 bridge.get('/research/lead/:id', asyncHandler(ctrl.researchLead));
 bridge.get('/report-data', asyncHandler(ctrl.reportData));
@@ -41,6 +44,12 @@ router.get('/outreach', asyncHandler(ctrl.listDrafts));
 router.put('/outreach/:id', asyncHandler(ctrl.editDraft));
 router.post('/outreach/:id/:decision(approve|reject)', asyncHandler(ctrl.decideDraft));
 router.get('/analytics', asyncHandler(ctrl.analytics));
+router.get('/sales/overview', asyncHandler(sales.overview));
+router.get('/sales/leads/:leadId', asyncHandler(sales.lead));
+router.post('/sales/leads/:leadId/queue', asyncHandler(sales.queue));
+router.put('/sales/playbooks/:id', asyncHandler(sales.editPlaybook));
+router.post('/sales/playbooks/:id/follow-ups', asyncHandler(sales.scheduleFollowUps));
+router.post('/outreach/:id/sent', asyncHandler(sales.markSent));
 router.get('/config', asyncHandler(ctrl.getConfig));
 router.put('/config', asyncHandler(ctrl.updateConfig));
 

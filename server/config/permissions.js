@@ -31,6 +31,7 @@ const PERMISSIONS = {
   'performance.view': 'Team performance reports within your scope',
   'settings.manage': 'Admin settings',
   'agent.manage': 'AI Agent control center: Claude Code connection, tasks, activity, reports and approvals',
+  'email.send': 'Send email from the official mailbox (Titan): composer, bulk campaigns, follow-ups, reply sync and email settings',
 };
 
 const ALL = Object.keys(PERMISSIONS);
@@ -44,7 +45,7 @@ const MATRIX = {
 
 // Requests made with a Claude Code agent token act as the admin who issued it, minus
 // these: the agent never sees raw contact values or manages people, settings or exports.
-const AGENT_DENIED = ['contacts.reveal', 'contacts.view_unmasked', 'users.manage', 'settings.manage', 'leads.delete', 'leads.export', 'audit.export', 'locations.manage'];
+const AGENT_DENIED = ['contacts.reveal', 'contacts.view_unmasked', 'users.manage', 'settings.manage', 'leads.delete', 'leads.export', 'audit.export', 'locations.manage', 'email.send'];
 
 const permissionsFor = (role) => MATRIX[role] || [];
 const can = (user, permission) =>

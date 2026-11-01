@@ -358,7 +358,8 @@ test('reports: validated, linked to the session\'s own task, admin-only to read'
 });
 
 test('outreach drafts wait for approval, stay hidden from employees until approved, and are never sent', async () => {
-  assert.equal((await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'WHATSAPP', body: 'hi' })).status, 400, 'agent channels only');
+  // WhatsApp and call scripts became agent channels with AI Sales Intelligence; unknown channels are still refused.
+  assert.equal((await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'SMS', body: 'hi' })).status, 400, 'agent channels only');
   const d = await a1('POST', '/agent/bridge/outreach', { lead_id: ids.lead, channel: 'PROPOSAL', subject: 'Website proposal', body: 'Dear team, ...', evidence: ['Site is not mobile-friendly'] });
   assert.equal(d.status, 201, JSON.stringify(d.body));
   assert.equal(d.body.data.status, 'PENDING_APPROVAL');
@@ -514,7 +515,7 @@ test('MCP server: real stdio handshake, tool list, read + write tools, heartbeat
   try {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
-    for (const n of ['get_leads', 'get_lead_details', 'search_leads', 'get_companies', 'get_company_details', 'get_company_contacts', 'get_lead_scores', 'get_search_history', 'get_discovery_statistics', 'get_automation_status', 'add_lead_notes', 'create_followup_task', 'get_next_task', 'complete_task', 'fail_task', 'get_agent_status', 'research_company', 'analyse_company_website', 'analyse_business_opportunity', 'qualify_lead', 'identify_public_business_contacts', 'detect_business_signals', 'find_potential_website_improvements', 'update_lead_status', 'update_lead_score', 'save_research_report', 'create_outreach_draft', 'generate_daily_report', 'generate_weekly_report', 'generate_prospecting_report', 'generate_competitor_report']) {
+    for (const n of ['get_leads', 'get_lead_details', 'search_leads', 'get_companies', 'get_company_details', 'get_company_contacts', 'get_lead_scores', 'get_search_history', 'get_discovery_statistics', 'get_automation_status', 'add_lead_notes', 'create_followup_task', 'get_next_task', 'complete_task', 'fail_task', 'get_agent_status', 'research_company', 'analyse_company_website', 'analyse_business_opportunity', 'qualify_lead', 'identify_public_business_contacts', 'detect_business_signals', 'find_potential_website_improvements', 'update_lead_status', 'update_lead_score', 'save_research_report', 'create_outreach_draft', 'generate_daily_report', 'generate_weekly_report', 'generate_prospecting_report', 'generate_competitor_report', 'get_sales_playbook', 'save_sales_playbook']) {
       assert.ok(names.includes(n), n);
     }
 

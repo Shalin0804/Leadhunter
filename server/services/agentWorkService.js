@@ -13,7 +13,7 @@
  */
 const { Op } = require('sequelize');
 const {
-  Company, CompanyContact, CompanyWebsite, CompanySocial, DetectedSignal, Signal, Lead, LeadStatusHistory, SearchRun, Outreach, AgentTask, AgentReport, User,
+  Company, CompanyContact, CompanyWebsite, CompanySocial, DetectedSignal, Signal, Lead, LeadStatusHistory, SearchRun, Outreach, AgentTask, AgentReport, User, SalesPlaybook,
 } = require('../models');
 const access = require('./accessService');
 const agent = require('./agentService');
@@ -92,7 +92,18 @@ async function saveReport(b, user, sessionId) {
 
 /* ---------------- outreach drafts + approvals ---------------- */
 
-const AGENT_CHANNELS = ['EMAIL', 'FOLLOW_UP', 'LINKEDIN', 'PROPOSAL'];
+const AGENT_CHANNELS = ['EMAIL', 'FOLLOW_UP', 'LINKEDIN', 'PROPOSAL', 'WHATSAPP', 'PHONE_TALKING_POINTS'];
+// Which message of a sales pack a draft is -> the channel it must use.
+const PURPOSES = {
+  cold_email: ['EMAIL'],
+  follow_up_email: ['EMAIL', 'FOLLOW_UP'],
+  meeting_request: ['EMAIL', 'WHATSAPP', 'LINKEDIN'],
+  whatsapp: ['WHATSAPP'],
+  follow_up_whatsapp: ['WHATSAPP'],
+  linkedin: ['LINKEDIN'],
+  call_script: ['PHONE_TALKING_POINTS'],
+  proposal: ['PROPOSAL'],
+};
 
 async function createDraft(b, user, sessionId) {
   if (!b || typeof b !== 'object') bad('Body must be an object');
@@ -102,8 +113,10 @@ async function createDraft(b, user, sessionId) {
   if (typeof b.body !== 'string' || !b.body.trim() || b.body.length > 20000) bad('body must be 1-20000 characters');
   const evidence = b.evidence ?? [];
   if (!Array.isArray(evidence) || evidence.length > 30 || !evidence.every((e) => typeof e === 'string' && e.length <= 500)) bad('evidence must be a list of up to 30 short facts');
+  if (b.purpose != null && !PURPOSES[b.purpose]?.includes(b.channel)) bad(`purpose must be one of ${Object.keys(PURPOSES).join(', ')} and match the channel`);
   const task = await ownTask(b.task_id, sessionId);
   const { leadId, companyId } = await resolveRecord(user, b.lead_id, null);
+  if (b.playbook_id != null && !(await SalesPlaybook.count({ where: { id: b.playbook_id, lead_id: leadId } }))) bad('playbook_id does not belong to this lead');
   const o = await Outreach.create({
     lead_id: leadId,
     company_id: companyId,
@@ -115,6 +128,8 @@ async function createDraft(b, user, sessionId) {
     generated_by: 'claude_code',
     status: 'PENDING_APPROVAL',
     agent_task_id: task?.id ?? null,
+    purpose: b.purpose ?? null,
+    playbook_id: b.playbook_id ?? null,
   });
   await agent.logActivity({ type: 'draft_created', action: `Outreach draft #${o.id} (${b.channel}) awaiting approval`, taskId: task?.id, leadId, companyId, sessionId });
   return o.get({ plain: true });
@@ -395,5 +410,5 @@ async function listDrafts({ status, page, limit, offset }) {
 }
 
 module.exports = {
-  saveReport, createDraft, editDraft, decideDraft, proposeLeadChange, decideProposal, companyAnalysis, leadAnalysis, reportData, analytics, listReports, getReport, listDrafts, AGENT_CHANNELS,
+  saveReport, createDraft, editDraft, decideDraft, proposeLeadChange, decideProposal, companyAnalysis, leadAnalysis, reportData, analytics, listReports, getReport, listDrafts, AGENT_CHANNELS, PURPOSES, ownTask, resolveRecord,
 };

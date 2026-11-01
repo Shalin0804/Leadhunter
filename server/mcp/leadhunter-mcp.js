@@ -352,16 +352,73 @@ tool(
 
 tool(
   'create_outreach_draft',
-  'Save a personalised outreach DRAFT (cold email, follow-up, LinkedIn message or business proposal) for admin review. Nothing is ever sent: the admin edits, approves or rejects it, and a person sends approved drafts themselves. Ground every claim in evidence.',
+  'Save a personalised outreach DRAFT (cold email, follow-up, WhatsApp, LinkedIn, call script, meeting request or proposal) for admin review. Nothing is ever sent: the admin edits, approves or rejects it, and a person sends approved drafts themselves. Ground every claim in evidence. For a sales pack, set purpose and playbook_id.',
   {
     lead_id: id,
-    channel: z.enum(['EMAIL', 'FOLLOW_UP', 'LINKEDIN', 'PROPOSAL']),
+    channel: z.enum(['EMAIL', 'FOLLOW_UP', 'LINKEDIN', 'PROPOSAL', 'WHATSAPP', 'PHONE_TALKING_POINTS']),
+    purpose: z
+      .enum(['cold_email', 'follow_up_email', 'meeting_request', 'whatsapp', 'follow_up_whatsapp', 'linkedin', 'call_script', 'proposal'])
+      .optional()
+      .describe('cold_email/meeting_request: EMAIL; follow_up_email: FOLLOW_UP; whatsapp/follow_up_whatsapp: WHATSAPP; linkedin: LINKEDIN; call_script: PHONE_TALKING_POINTS; proposal: PROPOSAL'),
+    playbook_id: id.optional().describe('The sales playbook this message belongs to'),
     subject: z.string().max(255).optional(),
     body: z.string().min(1).max(20000),
     evidence: z.array(z.string().max(500)).max(30).describe('The real facts the message relies on'),
     task_id: id.optional(),
   },
   (a, t) => api('POST', '/agent/bridge/outreach', { body: a, tool: t })
+);
+
+/* ---------------- sales intelligence (sales_strategy tasks) ---------------- */
+
+const line = z.string().max(500);
+const para = z.string().max(2000);
+tool(
+  'get_sales_playbook',
+  "A lead's latest sales playbook (if any), its existing Claude drafts, Codefloor IT's services (the ONLY services you may recommend) and the allowed sections. Read this before writing so a focused task updates, rather than repeats, earlier work.",
+  { lead_id: id },
+  ({ lead_id: leadId }, t) => api('GET', `/agent/bridge/playbooks/${leadId}`, { tool: t })
+);
+tool(
+  'save_sales_playbook',
+  "Save a new version of a lead's sales playbook. Send only the sections this task produced; earlier sections carry over. Facts must come from CRM data or cited public sources; write 'unknown' rather than guess. relevant_services must be taken from Codefloor IT's service list. Then save each outreach message with create_outreach_draft (purpose + playbook_id).",
+  {
+    lead_id: id,
+    task_id: id.optional(),
+    confidence: z.number().int().min(0).max(100),
+    source_urls: z.array(z.string().url()).max(100).optional(),
+    sections: z.object({
+      intelligence: z
+        .object({
+          industry: z.string().max(200).optional(),
+          business_model: para.optional(),
+          services: z.array(line).max(20).optional(),
+          website_findings: z.array(line).max(20).optional(),
+          technology_problems: z.array(line).max(20).optional(),
+          software_opportunities: z.array(line).max(20).optional(),
+          relevant_services: z.array(z.enum(['Business website development', 'Custom web application development', 'E-commerce development', 'Website modernization', 'Maintenance and support'])).max(5).optional(),
+          lead_quality: z.object({ rating: z.enum(['high', 'medium', 'low', 'unknown']), reasons: z.array(line).max(20).optional() }).optional(),
+          missing_information: z.array(line).max(20).optional(),
+        })
+        .optional(),
+      sales_angle: z
+        .object({
+          best_angle: para.optional(),
+          primary_pain_point: para.optional(),
+          recommended_solution: para.optional(),
+          why_needed: para.optional(),
+          expected_benefits: z.array(line).max(20).optional(),
+          conversation_opener: para.optional(),
+          why_codefloor: para.optional().describe('Only from FOUNDER_CONTEXT.md facts; no invented clients, results or prices'),
+          alternative_angles: z.array(line).max(20).optional(),
+        })
+        .optional(),
+      objections: z.array(z.object({ objection: z.string().max(300), response: para, next_action: line })).max(15).optional(),
+      closing: z.object({ negotiation_strategy: para.optional(), meeting_strategy: para.optional(), closing_approach: para.optional(), recommended_next_step: line.optional() }).optional(),
+      follow_up_schedule: z.array(z.object({ day: z.number().int().min(0).max(365), channel: z.enum(['EMAIL', 'WHATSAPP', 'PHONE', 'LINKEDIN']), action: z.string().max(300) })).max(12).optional(),
+    }),
+  },
+  (a, t) => api('POST', '/agent/bridge/playbooks', { body: a, tool: t })
 );
 
 /* ---------------- reporting (data for you to write the report; save it with save_research_report) ---------------- */

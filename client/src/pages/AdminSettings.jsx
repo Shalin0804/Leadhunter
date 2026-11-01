@@ -17,7 +17,10 @@ export default function AdminSettings() {
           <h1>Admin Settings</h1>
           <p>Access control and audit configuration. Values marked “env” are set on the server, not here.</p>
         </div>
-        <Link className="btn" to="/automation">Automation settings</Link>
+        <div className="flex gap-2">
+          <Link className="btn" to="/email">Email settings</Link>
+          <Link className="btn" to="/automation">Automation settings</Link>
+        </div>
       </div>
 
       <div className="grid chart-grid mb-3">

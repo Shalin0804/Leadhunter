@@ -24,6 +24,8 @@ import LeadAssignment from './pages/LeadAssignment';
 import TeamPerformance from './pages/TeamPerformance';
 import ActivityLog from './pages/ActivityLog';
 import AdminSettings from './pages/AdminSettings';
+import EmailCenter from './pages/EmailCenter';
+import AISales from './pages/AISales';
 import LocationManagement from './pages/LocationManagement';
 import LeadDiscovery from './pages/LeadDiscovery';
 import BusinessCategories from './pages/BusinessCategories';
@@ -98,6 +100,8 @@ export default function App() {
         <Route path="/locations" element={guard('locations.manage', <LocationManagement />)} />
         <Route path="/admin-settings" element={guard('settings.manage', <AdminSettings />)} />
         <Route path="/ai-agent" element={guard('agent.manage', <AIAgent />)} />
+        <Route path="/email" element={guard('email.send', <EmailCenter />)} />
+        <Route path="/ai-sales" element={guard('agent.manage', <AISales />)} />
       </Route>
       <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
     </Routes>

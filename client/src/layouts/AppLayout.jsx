@@ -28,6 +28,8 @@ import {
   FiClock,
   FiBookOpen,
   FiCommand,
+  FiMail,
+  FiTrendingUp,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -80,7 +82,11 @@ const NAV = [
   },
   {
     section: 'AI Agent',
-    items: [{ to: '/ai-agent', label: 'AI Agent', icon: <FiCommand />, perm: 'agent.manage' }],
+    items: [
+      { to: '/ai-agent', label: 'AI Agent', icon: <FiCommand />, perm: 'agent.manage' },
+      { to: '/ai-sales', label: 'AI Sales', icon: <FiTrendingUp />, perm: 'agent.manage' },
+      { to: '/email', label: 'Email', icon: <FiMail />, perm: 'email.send' },
+    ],
   },
   {
     section: 'Settings',

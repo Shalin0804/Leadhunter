@@ -33,6 +33,9 @@ const DuplicateReview = require('./DuplicateReview')(sequelize);
 const AgentTask = require('./AgentTask')(sequelize);
 const AgentActivity = require('./AgentActivity')(sequelize);
 const AgentReport = require('./AgentReport')(sequelize);
+const EmailMessage = require('./EmailMessage')(sequelize);
+const EmailCampaign = require('./EmailCampaign')(sequelize);
+const SalesPlaybook = require('./SalesPlaybook')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -160,6 +163,18 @@ AgentReport.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constr
 AgentReport.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
 AgentReport.belongsTo(AgentTask, { as: 'task', foreignKey: 'task_id', constraints: false });
 Outreach.belongsTo(User, { as: 'reviewedBy', foreignKey: 'reviewed_by_user_id', constraints: false });
+SalesPlaybook.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+SalesPlaybook.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+SalesPlaybook.belongsTo(User, { as: 'editedBy', foreignKey: 'edited_by_user_id', constraints: false });
+Outreach.belongsTo(SalesPlaybook, { as: 'playbook', foreignKey: 'playbook_id', constraints: false });
+
+// Email (Titan). No FK constraints: email history outlives deleted leads/companies.
+EmailMessage.belongsTo(Lead, { as: 'lead', foreignKey: 'lead_id', constraints: false });
+EmailMessage.belongsTo(Company, { as: 'company', foreignKey: 'company_id', constraints: false });
+EmailMessage.belongsTo(EmailCampaign, { as: 'campaign', foreignKey: 'campaign_id', constraints: false });
+EmailMessage.belongsTo(User, { as: 'sentBy', foreignKey: 'sent_by_user_id', constraints: false });
+EmailCampaign.hasMany(EmailMessage, { as: 'messages', foreignKey: 'campaign_id', constraints: false });
+Lead.hasMany(EmailMessage, { as: 'emails', foreignKey: 'lead_id', constraints: false });
 
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
@@ -206,6 +221,9 @@ const db = {
   AgentTask,
   AgentActivity,
   AgentReport,
+  EmailMessage,
+  EmailCampaign,
+  SalesPlaybook,
 };
 
 module.exports = db;
