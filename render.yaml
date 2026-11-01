@@ -71,6 +71,25 @@ services:
         sync: false
       - key: AUTOMATION_STALE_THRESHOLD_MINUTES
         value: "1500"
+      # Titan Mail prospect email (see DEPLOY.md section 10). Password set in the dashboard only.
+      - key: TITAN_SMTP_HOST
+        value: smtp.titan.email
+      - key: TITAN_SMTP_PORT
+        value: "465"
+      - key: TITAN_SMTP_SECURE
+        value: "true"
+      - key: TITAN_SMTP_USER
+        value: info@codefloorit.in
+      - key: TITAN_SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: Codefloor IT
+      - key: EMAIL_FROM_ADDRESS
+        value: info@codefloorit.in
+      - key: TITAN_IMAP_ENABLED
+        value: "false"
+      - key: EMAIL_IMAP_SYNC_MINUTES
+        value: "0"
       - key: ALERT_COOLDOWN_MINUTES
         value: "60"
       # Score (0-100) at/above which a lead becomes eligible for contact enrichment.

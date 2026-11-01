@@ -361,6 +361,8 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-danger { color: var(--danger); }
+.alert { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.alert.warn { background: var(--warning-soft); color: var(--warning); }
 .link-box { background: var(--surface-2); border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 12px; }
 .link-box .input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .masked-contact { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }

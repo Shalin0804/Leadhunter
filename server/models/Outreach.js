@@ -25,6 +25,12 @@ module.exports = (sequelize) => {
       reviewed_at: { type: DataTypes.DATE, allowNull: true },
       review_note: { type: DataTypes.STRING(500), allowNull: true },
       agent_task_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Which message of a sales pack this is (cold_email, whatsapp, call_script, ...); null for older drafts.
+      purpose: { type: DataTypes.STRING(30), allowNull: true },
+      playbook_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+      // Set when a person marks an approved draft as sent (WhatsApp / call / LinkedIn are sent by hand).
+      sent_at: { type: DataTypes.DATE, allowNull: true },
+      sent_by_user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     },
     {
       tableName: 'outreach',

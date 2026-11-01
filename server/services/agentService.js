@@ -30,6 +30,8 @@ const TASK_TYPES = {
   research_company: { mode: 'research', needs: 'company', label: 'Research' },
   analyse_lead: { mode: 'lead_analyst', needs: 'lead', label: 'Analyse lead' },
   generate_outreach: { mode: 'sales', needs: 'lead', label: 'Draft outreach for' },
+  // input.focus picks the part (see salesService.FOCUS): full, intelligence, cold_email, whatsapp, call_script, objections, follow_up_plan.
+  sales_strategy: { mode: 'sales', needs: 'lead', label: 'Sales strategy for' },
   strategy_review: { mode: 'strategy', needs: null, label: 'Strategy review' },
   competitor_research: { mode: 'competitor', needs: null, label: 'Competitor research' },
   daily_report: { mode: 'reporting', needs: null, label: 'Daily report' },
@@ -47,8 +49,9 @@ const CONFIG_DEFAULTS = {
   target_locations: [],
   min_lead_score: 50,
   daily_task_limit: 50, // tasks claimed per rolling 24 h
-  schedules: { daily_report: false, weekly_report: false, auto_research_new_leads: false },
+  schedules: { daily_report: false, weekly_report: false, auto_research_new_leads: false, auto_sales_new_leads: false },
   auto_research_per_day: 10,
+  auto_sales_per_day: 10, // new leads that get a full sales strategy per rolling 24 h
 };
 const TEXT_MAX = 2000;
 
@@ -78,8 +81,8 @@ async function updateConfig(patch, user) {
     } else if (k === 'daily_task_limit') {
       if (!Number.isInteger(v) || v < 1 || v > 1000) bad('daily_task_limit must be 1-1000');
       next[k] = v;
-    } else if (k === 'auto_research_per_day') {
-      if (!Number.isInteger(v) || v < 1 || v > 100) bad('auto_research_per_day must be 1-100');
+    } else if (k === 'auto_research_per_day' || k === 'auto_sales_per_day') {
+      if (!Number.isInteger(v) || v < 1 || v > 100) bad(`${k} must be 1-100`);
       next[k] = v;
     } else if (k === 'schedules') {
       if (!v || typeof v !== 'object' || !Object.entries(v).every(([sk, sv]) => sk in CONFIG_DEFAULTS.schedules && typeof sv === 'boolean')) {
@@ -179,8 +182,8 @@ const AGENT_ROUTES = [
   ['GET', /^\/dashboard\/(stats|lead-generation|opportunities|daily-summary|automation-status)(\?|$)/],
   ['POST', /^\/notes$/],
   ['POST', /^\/tasks$/],
-  ['POST', /^\/agent\/bridge\/(heartbeat|disconnect|tasks\/claim|tasks\/\d+\/(complete|fail)|reports|outreach|proposals)$/],
-  ['GET', /^\/agent\/bridge\/(status|reports|report-data|research\/(company|lead)\/\d+)(\?|$)/],
+  ['POST', /^\/agent\/bridge\/(heartbeat|disconnect|tasks\/claim|tasks\/\d+\/(complete|fail)|reports|outreach|proposals|playbooks)$/],
+  ['GET', /^\/agent\/bridge\/(status|reports|report-data|research\/(company|lead)\/\d+|playbooks\/\d+)(\?|$)/],
 ];
 // Dot segments, encoded separators and backslashes are refused outright, so the regexes
 // above only ever see the literal path Express will route.
@@ -288,7 +291,7 @@ async function setControl(action, user, { enabledModes } = {}) {
 
 const clean = (t) => (t ? t.get({ plain: true }) : null);
 const activeKey = (type, leadId, companyId, input) =>
-  leadId || companyId ? `${type}:${leadId ? `lead:${leadId}` : `company:${companyId}`}` : `${type}:${crypto.createHash('sha1').update(JSON.stringify(input || {})).digest('hex')}`;
+  leadId || companyId ? `${type}:${leadId ? `lead:${leadId}` : `company:${companyId}`}${input?.focus || input?.channel ? `:${input.focus || input.channel}` : ''}` : `${type}:${crypto.createHash('sha1').update(JSON.stringify(input || {})).digest('hex')}`;
 
 /**
  * opts.internal  — allow internal types (lead_change_proposal); never from the admin API.
@@ -427,6 +430,30 @@ async function enqueueScheduled(user, config) {
       for (const l of leads) {
         // eslint-disable-next-line no-await-in-loop
         await make({ type: 'research_company', companyId: l.company_id, priority: 6 });
+      }
+    }
+  }
+  if (config.schedules.auto_sales_new_leads) {
+    // New leads -> one full sales strategy each (research, playbook, outreach drafts for approval).
+    const since = new Date(Date.now() - 24 * 3600 * 1000);
+    const doneToday = await AgentTask.count({ where: { type: 'sales_strategy', created_by_user_id: null, created_at: { [Op.gte]: since } } });
+    const room = config.auto_sales_per_day - doneToday;
+    if (room > 0) {
+      const already = (await AgentTask.findAll({ where: { type: 'sales_strategy' }, attributes: ['lead_id'], raw: true })).map((r) => r.lead_id);
+      const leads = await Lead.findAll({
+        where: {
+          lead_score: { [Op.gte]: config.min_lead_score },
+          contact_status: 'NOT_CONTACTED',
+          created_at: { [Op.gte]: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+          ...(already.length ? { id: { [Op.notIn]: already } } : {}),
+        },
+        include: [{ model: Company, as: 'company', attributes: ['company_name'] }],
+        order: [['lead_score', 'DESC']],
+        limit: room,
+      });
+      for (const l of leads) {
+        // eslint-disable-next-line no-await-in-loop
+        await make({ type: 'sales_strategy', leadId: l.id, priority: 6, title: `Full sales strategy: ${l.company?.company_name || `lead #${l.id}`}`, input: { focus: 'full' } });
       }
     }
   }

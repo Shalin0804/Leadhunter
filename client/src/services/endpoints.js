@@ -223,6 +223,28 @@ export const signalApi = {
   },
 };
 
+// Titan email (Main Admin only — email.send). SMTP credentials never reach the browser.
+export const emailApi = {
+  settings: () => unwrap(api.get('/email/settings')),
+  testConnection: () => unwrap(api.post('/email/settings/test-connection')),
+  testEmail: (to) => unwrap(api.post('/email/settings/test-email', { to })),
+  recent: (params) => unwrap(api.get(`/email/messages${qs(params)}`)),
+  lead: (leadId) => unwrap(api.get(`/email/leads/${leadId}`)),
+  generate: (body) => unwrap(api.post('/email/generate', body)),
+  askClaude: (leadId, kind) => unwrap(api.post(`/email/leads/${leadId}/claude-draft`, { kind })),
+  saveDraft: (body) => unwrap(api.post('/email/messages', body)),
+  updateDraft: (id, body) => unwrap(api.put(`/email/messages/${id}`, body)),
+  removeDraft: (id) => unwrap(api.delete(`/email/messages/${id}`)),
+  send: (id) => unwrap(api.post(`/email/messages/${id}/send`)),
+  campaigns: (params) => unwrap(api.get(`/email/campaigns${qs(params)}`)),
+  prepareCampaign: (body) => unwrap(api.post('/email/campaigns', body)),
+  campaign: (id) => unwrap(api.get(`/email/campaigns/${id}`)),
+  startCampaign: (id, expected_count) => unwrap(api.post(`/email/campaigns/${id}/send`, { confirm: true, expected_count })),
+  cancelCampaign: (id) => unwrap(api.post(`/email/campaigns/${id}/cancel`)),
+  followUps: () => unwrap(api.get('/email/follow-ups')),
+  syncReplies: () => unwrap(api.post('/email/replies/sync')),
+};
+
 // Claude Code AI agent control center (Main Admin only — agent.manage).
 export const agentApi = {
   overview: () => unwrap(api.get('/agent/overview')),
@@ -241,6 +263,13 @@ export const agentApi = {
   decideDraft: (id, decision, note) => unwrap(api.post(`/agent/outreach/${id}/${decision}`, { note })),
   decideProposal: (id, decision, note) => unwrap(api.post(`/agent/tasks/${id}/${decision}`, { note })),
   analytics: (params) => unwrap(api.get(`/agent/analytics${qs(params)}`)),
+  // AI Sales Intelligence
+  salesOverview: () => unwrap(api.get('/agent/sales/overview')),
+  salesLead: (leadId) => unwrap(api.get(`/agent/sales/leads/${leadId}`)),
+  salesQueue: (leadId, focus) => unwrap(api.post(`/agent/sales/leads/${leadId}/queue`, { focus })),
+  editPlaybook: (id, sections) => unwrap(api.put(`/agent/sales/playbooks/${id}`, { sections })),
+  scheduleFollowUps: (id) => unwrap(api.post(`/agent/sales/playbooks/${id}/follow-ups`)),
+  markSent: (id) => unwrap(api.post(`/agent/outreach/${id}/sent`)),
   config: () => unwrap(api.get('/agent/config')),
   updateConfig: (body) => unwrap(api.put('/agent/config', body)),
 };

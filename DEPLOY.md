@@ -362,6 +362,20 @@ queue claim race / retry / timeout / recovery, approvals, proposals, reports, an
 schedules, a real MCP stdio round-trip). Run the same suite on a throwaway TiDB with
 `docker run -d --rm -p 4000:4000 pingcap/tidb`, then `TEST_DB_URL=mysql://root@127.0.0.1:4000/test`.
 
+### AI Sales Intelligence
+Each lead page (Main Admin) has an **AI Sales Intelligence** section. **AI Sales** in the sidebar is the dashboard.
+
+- **Buttons:** Analyze lead, Generate sales strategy, Generate email, Generate WhatsApp pitch, Generate call script, Generate objection handling, Generate follow-up plan, Regenerate analysis. Each queues a `sales_strategy` task with a `focus`. Only one task per lead per focus can wait at a time.
+- **Playbook:** Claude saves a versioned **sales playbook** (`sales_playbooks`): lead intelligence, sales angle, objection handling, negotiation and closing, and a follow-up schedule. Every save is a new version and earlier versions stay viewable. A focused task updates only its sections; the rest carry over. Admins can edit any section; edits are audited.
+- **Allowed services:** the playbook may only recommend Codefloor IT's five services from FOUNDER_CONTEXT.md. The server rejects anything else.
+- **Outreach pack:** cold email, WhatsApp, LinkedIn, call script, follow-up email, follow-up WhatsApp and meeting request. These are ordinary outreach drafts (`outreach.purpose`, `playbook_id`) in the normal approval queue.
+- **Sending:** emails go out through the Email module (Titan). WhatsApp opens a prefilled chat that a person sends. **Mark as sent** logs the contact and moves a new lead to Contacted.
+- **Follow-ups:** *Create follow-up tasks* turns the playbook's schedule into follow-up tasks; re-running it creates no duplicates.
+- **Automation:** AI Agent → Settings → *Full sales strategy for new leads* (and the per-day cap) queues one strategy per new, uncontacted lead at or above the minimum score. It runs only while Claude Code is connected; outreach still waits for approval.
+- **Facts you should add:** FOUNDER_CONTEXT.md has no value proposition, portfolio, prices or clients yet. Until it does, "why Codefloor" stays generic and the "send us your portfolio" objection is answered with an offer of a call.
+- **Database changes** (applied by `npm run migrate`): a new `sales_playbooks` table; `outreach` gains `purpose`, `playbook_id`, `sent_at` and `sent_by_user_id`. The migration was rehearsed on TiDB from the current production schema, and existing rows are kept.
+- **Tests:** `npm --prefix server run test:sales`.
+
 ### Founder Skills
 
 `.claude/skills/` also contains nine skills from
@@ -370,6 +384,38 @@ schedules, a real MCP stdio round-trip). Run the same suite on a throwaway TiDB 
 competitor-intel, pricing-strategist, linkedin-writer, brand-copywriter, cro-optimization,
 marketing-ideas. They read `FOUNDER_CONTEXT.md` (project root). Use them directly in Claude Code
 (`/outreach-specialist …`), and the agent uses them for outreach, strategy and competitor tasks.
+
+## 10. Titan Mail (prospect email from info@codefloorit.in)
+
+Admins (Main Admin only, permission `email.send`) can email leads from the official mailbox: a composer on each lead, bulk campaigns from the Leads page, follow-ups, and optional reply tracking. Everything is sent by the server over SMTP. The browser never sees the credentials, and the Claude Code agent token is denied `email.send`, so the agent can draft but never send.
+
+### Setup
+1. **Find your real SMTP host.** Log in to Titan webmail as info@codefloorit.in → Settings → *Configure desktop app* (or ask your Titan reseller). Standard Titan: SMTP `smtp.titan.email` port `465` SSL (or `587` STARTTLS), IMAP `imap.titan.email` port `993`. Don't assume a host from where the domain is registered.
+2. If the mailbox has 2-step verification, create an app password for it in Titan and use that.
+3. Render → the API service → **Environment**: set `TITAN_SMTP_PASSWORD` (the others are pre-filled by `render.yaml`; override `TITAN_SMTP_HOST`/`PORT` if step 1 showed different values). Save, then redeploy.
+4. LeadHunter → **Email** (sidebar) → *Test SMTP connection*, then *Send test email* to an address you control. Check the email arrived (and not in spam) before emailing any prospect.
+5. Recommended for deliverability: make sure SPF, DKIM and DMARC for codefloorit.in are set up as Titan instructs (Titan admin panel → domain/DNS). Without them, Gmail/Outlook are more likely to spam-folder your mail.
+
+### How sending works
+- **Single email:** lead → Email → Compose. *AI generate* uses the existing generator (the Nemotron AI when `NVIDIA_API_KEY` is set and "Use Nemotron AI" is ticked, otherwise the rule-based template) built only from stored facts. *Ask Claude to draft* queues a `generate_outreach` task for the Claude Code agent; its draft appears under *Claude Code drafts* and can be loaded into the composer. You edit, preview, then *Send email* → confirm.
+- **Bulk:** Leads → tick leads → *Send email* → *Generate emails* (one draft per lead; an existing Claude Code draft for that lead is used first) → edit or remove individual emails → tick the confirmation → *Send*. Each recipient gets their own email (never CC/BCC lists), sent one by one `EMAIL_SEND_DELAY_MS` apart, with live per-recipient status.
+- **Guards (server-side):** the recipient must be one of the company's stored email contacts; leads marked Do Not Contact / Not Interested, and anyone who replied "unsubscribe", are refused; the same address is not emailed twice within `EMAIL_DUPLICATE_WINDOW_HOURS`; a follow-up is refused once the prospect has replied; hourly/daily caps (`EMAIL_HOURLY_LIMIT`/`EMAIL_DAILY_LIMIT`) pause a campaign rather than exceeding Titan's limits; a double click can't send twice (atomic claim). Temporary SMTP errors (4xx, dropped connection) are retried `EMAIL_MAX_RETRIES` times on the same row; auth failures pause a campaign.
+- **Every email** carries a plain-text unsubscribe line and a `List-Unsubscribe` header.
+- **Status meaning:** *Sent (accepted)* means Titan's SMTP server accepted the email. It does **not** confirm inbox delivery. SMTP gives no delivery or open receipts; a later bounce arrives as a normal email in the Titan inbox.
+- A server restart while an email was mid-send marks it *Failed (interrupted)*, because it may or may not have gone out. Check the Titan *Sent* folder before retrying. A campaign that was sending is *Paused*; open it from Email → Campaigns to resume.
+
+### Reply tracking (IMAP, optional)
+Titan supports IMAP. Set `TITAN_IMAP_ENABLED=true` (same user/password) and either click *Sync replies now* on the Email page or set `EMAIL_IMAP_SYNC_MINUTES` (e.g. `15`). Only replies to emails sent from LeadHunter are imported, matched by `In-Reply-To`/`References` (falling back to the sender's address). The rest of the inbox is ignored. Replies show in the lead's email history and activity. A reply moves a *Contacted/Follow-up* lead to *Replied*; a reply containing "unsubscribe" marks the lead *Do Not Contact*. Re-syncing never imports the same message twice. On Render Free the process sleeps, so interval syncs only run while it's awake. Use the button, or wake it with the existing cron.
+
+### Limits
+- Titan plan caps per mailbox (Starter 50/hour 300/day; Pro 200/500; Premium 300/1000; Ultra 500/2000). Set the two limit vars to your plan's numbers, or lower.
+- One server instance is assumed (in-process send lock and campaign worker). Scale-out needs a DB lock.
+
+### Database changes (applied by `npm run migrate` on deploy)
+New tables `email_messages` and `email_campaigns` (created by sync on MySQL/TiDB and Postgres; no existing table is altered). Follow-ups reuse `tasks` (`is_follow_up`); connection/sync status lives in `settings` key `email.status`. No credentials are stored.
+
+### Testing
+`npm --prefix server run test:email`: admin-only access, credentials never returned, SMTP verify + auth failure, test email, drafts, single send, duplicate/concurrent-send protection, retries, failures, limits, bulk campaigns, Claude drafts, IMAP reply matching (fake inbox), opt-out, restart recovery. Uses a fake SMTP transport and in-memory SQLite.
 
 ## Environment variable reference
 
@@ -401,6 +447,12 @@ marketing-ideas. They read `FOUNDER_CONTEXT.md` (project root). Use them directl
 | `GEONAMES_DATASET` | Render | default `cities1000` — default coverage when an import doesn't choose one |
 | `LOCATION_IMPORT_BATCH` | Render | default `500` — rows per checkpointed batch |
 | `DISCOVERY_JOBS_PER_TICK` | Render | default `3` — scheduled location jobs run per scheduler tick / cron call |
+| `TITAN_SMTP_HOST` / `TITAN_SMTP_PORT` / `TITAN_SMTP_SECURE` | Render | Titan SMTP, default `smtp.titan.email` / `465` / `true` (section 10) |
+| `TITAN_SMTP_USER` / `TITAN_SMTP_PASSWORD` | Render | mailbox login; password set in the dashboard only, never committed |
+| `EMAIL_FROM_NAME` / `EMAIL_FROM_ADDRESS` | Render | `Codefloor IT` / `info@codefloorit.in` (address defaults to the SMTP user) |
+| `EMAIL_HOURLY_LIMIT` / `EMAIL_DAILY_LIMIT` | Render | default `50` / `300` (Titan Starter); set to your plan |
+| `EMAIL_BULK_MAX` / `EMAIL_SEND_DELAY_MS` / `EMAIL_MAX_RETRIES` / `EMAIL_DUPLICATE_WINDOW_HOURS` | Render | defaults `50` / `20000` / `2` / `72` |
+| `TITAN_IMAP_ENABLED` / `TITAN_IMAP_HOST` / `TITAN_IMAP_PORT` / `EMAIL_IMAP_SYNC_MINUTES` | Render | reply tracking; default off / `imap.titan.email` / `993` / `0` (manual) |
 | `VITE_API_URL` | Vercel | `https://<render-api>/api` |
 | `AGENT_HEARTBEAT_STALE_SECONDS` | Render | default `120` — AI Agent shows Disconnected after this long without a heartbeat |
 | `AGENT_TASK_TIMEOUT_MINUTES` | Render | default `30` — a claimed agent task returns to the queue after this |

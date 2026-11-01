@@ -88,6 +88,33 @@ module.exports = {
     },
   },
 
+  // Outbound prospect email from the official Titan mailbox. Separate from `alerts.smtp`
+  // above (ops alerts) so the two can use different accounts. Credentials are env-only —
+  // never stored in the DB, never returned by the API.
+  email: {
+    host: env('TITAN_SMTP_HOST', 'smtp.titan.email'),
+    port: parseInt(env('TITAN_SMTP_PORT', '465'), 10),
+    secure: env('TITAN_SMTP_SECURE', 'true') === 'true',
+    user: env('TITAN_SMTP_USER', ''),
+    pass: env('TITAN_SMTP_PASSWORD', ''),
+    fromName: env('EMAIL_FROM_NAME', 'Codefloor IT'),
+    fromAddress: env('EMAIL_FROM_ADDRESS', ''),
+    // Titan Starter plan: 50/hour, 300/day per mailbox. Raise only if your plan allows it.
+    hourlyLimit: parseInt(env('EMAIL_HOURLY_LIMIT', '50'), 10),
+    dailyLimit: parseInt(env('EMAIL_DAILY_LIMIT', '300'), 10),
+    bulkMax: parseInt(env('EMAIL_BULK_MAX', '50'), 10),
+    sendDelayMs: parseInt(env('EMAIL_SEND_DELAY_MS', '20000'), 10),
+    maxRetries: parseInt(env('EMAIL_MAX_RETRIES', '2'), 10),
+    // The same address is not emailed twice inside this window (follow-ups included).
+    duplicateWindowHours: parseInt(env('EMAIL_DUPLICATE_WINDOW_HOURS', '72'), 10),
+    imap: {
+      enabled: env('TITAN_IMAP_ENABLED', 'false') === 'true',
+      host: env('TITAN_IMAP_HOST', 'imap.titan.email'),
+      port: parseInt(env('TITAN_IMAP_PORT', '993'), 10),
+      syncMinutes: parseInt(env('EMAIL_IMAP_SYNC_MINUTES', '0'), 10), // 0 = manual "Sync replies" only
+    },
+  },
+
   nvidia: {
     // NVIDIA NIM (https://integrate.api.nvidia.com/v1), OpenAI-compatible Chat
     // Completions API, used as LeadHunter's AI intelligence layer (qualification +

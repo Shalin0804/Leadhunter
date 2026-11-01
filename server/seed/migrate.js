@@ -155,8 +155,12 @@ async function migrateOutreachTable() {
     reviewed_at: { type: DataTypes.DATE, allowNull: true },
     review_note: { type: DataTypes.STRING(500), allowNull: true },
     agent_task_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    purpose: { type: DataTypes.STRING(30), allowNull: true },
+    playbook_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    sent_at: { type: DataTypes.DATE, allowNull: true },
+    sent_by_user_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   });
-  console.log('[migrate] outreach table has approval columns (status, reviewed_by_user_id, reviewed_at, review_note, agent_task_id) and PROPOSAL channel');
+  console.log('[migrate] outreach table has approval columns (status, reviewed_by_user_id, reviewed_at, review_note, agent_task_id), sales-pack columns (purpose, playbook_id, sent_at, sent_by_user_id) and PROPOSAL channel');
 }
 
 /** Add any missing columns to an existing table (no-op for a table that doesn't exist yet). */

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { FiArrowLeft, FiFileText, FiClock, FiUser, FiExternalLink, FiPhoneCall, FiRotateCcw, FiSend, FiZap, FiSearch, FiCpu, FiRefreshCw } from 'react-icons/fi';
 import { useApi } from '../hooks/useApi';
 import { leadApi, companyApi, hermesApi } from '../services/endpoints';
@@ -9,6 +9,8 @@ import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { AddNoteModal, AddFollowUpModal, AssignModal } from '../components/actionModals';
 import { ContactLeadModal, ContactStatusModal, RecontactModal, OutreachModal } from '../components/contactModals';
+import { LeadEmailCard } from '../components/email';
+import SalesIntelligence from '../components/SalesIntelligence';
 import {
   fmtDate,
   fmtDateTime,
@@ -36,6 +38,7 @@ const Row = ({ label, children }) => (
 export default function LeadProfile() {
   const { can } = useAuth();
   const { id } = useParams();
+  const [search] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
   const [modal, setModal] = useState(null);
@@ -388,6 +391,10 @@ export default function LeadProfile() {
               <Row label="Contactability">{lead.company?.contactability_score}/10</Row>
             </dl>
           </Card>
+
+          {can('agent.manage') && <SalesIntelligence leadId={lead.id} phone={phones[0]?.value} />}
+
+          {can('email.send') && <div id="email"><LeadEmailCard leadId={lead.id} autoCompose={search.get('compose') === '1'} /></div>}
 
           {(lead.ai_problem || lead.ai_sales_angle) && (
             <Card title="Rule-based Qualification">

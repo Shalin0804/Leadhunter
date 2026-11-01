@@ -19,6 +19,7 @@ const TASK_TYPES = {
   research_company: { label: 'Research a company', mode: 'research', needs: 'company' },
   analyse_lead: { label: 'Analyse a lead', mode: 'lead_analyst', needs: 'lead' },
   generate_outreach: { label: 'Draft outreach for a lead', mode: 'sales', needs: 'lead' },
+  sales_strategy: { label: 'Full sales strategy for a lead', mode: 'sales', needs: 'lead' },
   strategy_review: { label: 'Strategy review', mode: 'strategy', needs: null },
   competitor_research: { label: 'Research a competitor', mode: 'competitor', needs: null },
   daily_report: { label: 'Daily report', mode: 'reporting', needs: null },
@@ -31,7 +32,7 @@ const ACTIVITY_LABELS = {
   tool_call: 'Tool call', task_created: 'Task queued', task_claimed: 'Task started', task_completed: 'Task completed', task_failed: 'Task failed',
   task_timeout: 'Task timed out', task_pause: 'Task paused', task_resume: 'Task resumed', task_cancel: 'Task cancelled', task_retry: 'Task retried',
   connected: 'Connected', reconnected: 'Reconnected', disconnected: 'Disconnected', control: 'Control',
-  report_saved: 'Report saved', draft_created: 'Draft created', draft_edited: 'Draft edited', draft_approved: 'Draft approved', draft_rejected: 'Draft rejected',
+  report_saved: 'Report saved', playbook_saved: 'Sales playbook saved', draft_created: 'Draft created', draft_edited: 'Draft edited', draft_approved: 'Draft approved', draft_rejected: 'Draft rejected',
   proposal_created: 'Proposal', proposal_approved: 'Proposal approved', proposal_rejected: 'Proposal rejected',
 };
 const ACTIVITY_STATUS_TONE = { success: 'green', failure: 'hot', denied: 'warm' };
@@ -1044,6 +1045,7 @@ function Settings({ overview, onChanged }) {
         min_lead_score: Number(f.min_lead_score),
         daily_task_limit: Number(f.daily_task_limit),
         auto_research_per_day: Number(f.auto_research_per_day),
+        auto_sales_per_day: Number(f.auto_sales_per_day),
         schedules: f.schedules,
       });
       toast.success('Settings saved');
@@ -1077,6 +1079,8 @@ function Settings({ overview, onChanged }) {
           <label className="flex items-center gap-2 text-sm mb-3"><input type="checkbox" checked={f.schedules.weekly_report} onChange={sched('weekly_report')} /> Weekly report (once per week, from Monday)</label>
           <label className="flex items-center gap-2 text-sm mb-3"><input type="checkbox" checked={f.schedules.auto_research_new_leads} onChange={sched('auto_research_new_leads')} /> Research new leads automatically (last 7 days, at or above the minimum score, matching the targets)</label>
           <div className="field"><label htmlFor="ar">Automatic research per 24 h</label><input id="ar" className="input" type="number" min={1} max={100} required value={f.auto_research_per_day} onChange={set('auto_research_per_day')} /></div>
+          <label className="flex items-center gap-2 text-sm mb-3 mt-3"><input type="checkbox" checked={!!f.schedules.auto_sales_new_leads} onChange={sched('auto_sales_new_leads')} /> Full sales strategy for new leads (not yet contacted, last 7 days, at or above the minimum score). Outreach still waits for your approval.</label>
+          <div className="field"><label htmlFor="as">Automatic sales strategies per 24 h</label><input id="as" className="input" type="number" min={1} max={100} required value={f.auto_sales_per_day ?? 10} onChange={set('auto_sales_per_day')} /></div>
         </Card>
         <Card title="Approval requirements">
           <ul className="text-sm" style={{ margin: 0, paddingLeft: 18 }}>

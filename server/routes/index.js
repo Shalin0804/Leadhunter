@@ -50,5 +50,6 @@ router.use('/ai', discovery, require('./ai.routes'));
 router.use('/leadiq', discovery, require('./leadiq.routes'));
 router.use('/explorium', discovery, require('./explorium.routes'));
 router.use('/agent', requirePermission('agent.manage'), require('./agent.routes'));
+router.use('/email', requirePermission('email.send'), require('./email.routes'));
 
 module.exports = router;

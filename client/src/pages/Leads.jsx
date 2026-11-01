@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw, FiClock, FiStar, FiFileText, FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiDownload, FiExternalLink, FiPhoneCall, FiRotateCcw, FiClock, FiStar, FiFileText, FiCheckCircle, FiXCircle, FiMail } from 'react-icons/fi';
 import { useApi, useDebounced } from '../hooks/useApi';
 import { leadApi, userApi } from '../services/endpoints';
 import { useToast } from '../context/ToastContext';
@@ -9,6 +9,7 @@ import ContactValue from '../components/ContactValue';
 import { Card, Loader, ErrorBox, EmptyState, Pagination, ScoreBadge, TemperatureBadge, StatusBadge, SourceBadge } from '../components/ui';
 import { ContactLeadModal, RecontactModal } from '../components/contactModals';
 import ExportLeadsModal from '../components/ExportLeadsModal';
+import { BulkEmailModal } from '../components/email';
 import { fmtDateTime, titleCase, STATUS_LABELS, CONTACT_STATUS_LABELS, LEAD_SOURCE_LABELS } from '../utils/format';
 
 const STATUSES = Object.keys(STATUS_LABELS);
@@ -39,6 +40,9 @@ export default function Leads({ mine = false }) {
   const toast = useToast();
   const [modal, setModal] = useState(null); // { type, leadId }
   const { data: users } = useApi(() => userApi.list(), []);
+  const canEmail = can('email.send');
+  const [selected, setSelected] = useState([]);
+  const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const get = (k) => params.get(k) || '';
   const setParam = (k, v) => {
@@ -123,14 +127,21 @@ export default function Leads({ mine = false }) {
           <h1>{mine ? 'My Leads' : 'Leads'}</h1>
           <p>{mine ? 'Leads assigned to you.' : 'Qualified opportunities moving through your sales process.'}</p>
         </div>
-        {can('leads.export') && <div className="flex gap-2">
+        <div className="flex gap-2">
+        {canEmail && (
+          <button className="btn" disabled={!selected.length} onClick={() => setModal({ type: 'bulkEmail' })} title={selected.length ? undefined : 'Select leads with the checkboxes first'}>
+            <FiMail /> Send email{selected.length ? ` (${selected.length})` : ''}
+          </button>
+        )}
+        {can('leads.export') && <>
           <button className="btn" onClick={() => leadApi.exportCsv(query).catch((e) => toast.error(e.message))}>
             <FiDownload /> Export CSV
           </button>
           <button className="btn btn-primary" onClick={() => setModal({ type: 'export' })}>
             📊 Export to Excel (.xlsx)
           </button>
-        </div>}
+        </>}
+        </div>
       </div>
 
       <div className="chip-row mb-3">
@@ -233,6 +244,16 @@ export default function Leads({ mine = false }) {
               <table className="data">
                 <thead>
                   <tr>
+                    {canEmail && (
+                      <th>
+                        <input
+                          type="checkbox"
+                          aria-label="Select all leads on this page"
+                          checked={data.items.every((l) => selected.includes(l.id))}
+                          onChange={(e) => setSelected((s) => (e.target.checked ? [...new Set([...s, ...data.items.map((l) => l.id)])] : s.filter((id) => !data.items.some((l) => l.id === id))))}
+                        />
+                      </th>
+                    )}
                     <th>Company</th>
                     <th>Location</th>
                     <th>Website</th>
@@ -260,6 +281,7 @@ export default function Leads({ mine = false }) {
                     )[0];
                     return (
                       <tr key={l.id}>
+                        {canEmail && <td><input type="checkbox" aria-label={`Select ${l.company?.company_name}`} checked={selected.includes(l.id)} onChange={() => toggle(l.id)} /></td>}
                         <td>
                           <Link to={`/leads/${l.id}`} className="cell-strong">
                             {l.company?.company_name}
@@ -334,6 +356,11 @@ export default function Leads({ mine = false }) {
                             <button className="icon-btn" title="Lost" onClick={() => quickAction(l.id, 'LOST')}>
                               <FiXCircle />
                             </button>
+                            {canEmail && email && (
+                              <Link className="icon-btn" to={`/leads/${l.id}?compose=1#email`} title="Email this lead">
+                                <FiMail />
+                              </Link>
+                            )}
                             <Link className="icon-btn" to={`/leads/${l.id}`} title="View">
                               <FiExternalLink />
                             </Link>
@@ -352,6 +379,7 @@ export default function Leads({ mine = false }) {
 
       <ContactLeadModal open={modal?.type === 'contact'} onClose={() => setModal(null)} leadId={modal?.leadId} onDone={reload} />
       <ExportLeadsModal open={modal?.type === 'export'} onClose={() => setModal(null)} initialFilters={exportInitialFilters} />
+      <BulkEmailModal open={modal?.type === 'bulkEmail'} onClose={() => setModal(null)} leadIds={selected} onDone={() => { setSelected([]); reload(); }} />
       <RecontactModal open={modal?.type === 'recontact'} onClose={() => setModal(null)} leadId={modal?.leadId} onDone={reload} />
     </div>
   );

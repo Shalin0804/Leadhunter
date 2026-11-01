@@ -40,6 +40,16 @@ async function start() {
   // Resume geographic imports interrupted by a restart/sleep (checkpointed, idempotent).
   require('./services/locationImportService').resumeStaleJobs().catch((err) => console.error('[locations] resume failed:', err.message));
 
+  // Titan email: rows left SENDING by a restart are marked FAILED (they may have gone out),
+  // and the optional IMAP reply sync runs on its interval when EMAIL_IMAP_SYNC_MINUTES > 0.
+  require('./services/emailService').recoverInterrupted().catch((err) => console.error('[email] recovery failed:', err.message));
+  const { email: emailCfg } = config;
+  console.log(`[email] Titan SMTP ${emailCfg.user && emailCfg.pass ? `configured (${emailCfg.host}:${emailCfg.port})` : 'not configured (set TITAN_SMTP_USER + TITAN_SMTP_PASSWORD)'}`);
+  if (emailCfg.imap.enabled && emailCfg.imap.syncMinutes > 0) {
+    const sync = () => require('./services/emailReplyService').syncReplies().catch((err) => console.error('[email] reply sync failed:', err.message));
+    setInterval(sync, emailCfg.imap.syncMinutes * 60000).unref();
+  }
+
   logConfigStatus();
   installShutdownHook();
   reportStartup().catch((err) => console.error('[monitoring] startup report failed:', err.message));
