@@ -178,6 +178,13 @@ tool(
 
 tool('get_lead_details', 'Full lead record: company, websites, detected signals, sources, status history, notes, recent scores and AI qualification.', { lead_id: id }, ({ lead_id: leadId }, t) => api('GET', `/leads/${leadId}`, { tool: t }));
 
+tool(
+  'get_email_status',
+  "A lead's email history from the official mailbox: each email's status (DRAFT, SENT = accepted by SMTP, FAILED with its error, RECEIVED = reply), subject, kind and dates. Recipient addresses are masked. Read-only: you cannot send email. To propose one, use create_outreach_draft (cold_email / follow_up_email); an admin reviews and sends it from the lead's Email section.",
+  { lead_id: id },
+  ({ lead_id: leadId }, t) => api('GET', `/agent/bridge/emails/${leadId}`, { tool: t })
+);
+
 tool('get_lead_scores', "A lead's current rule-based score, temperature, recommended service, AI qualification fields and recent score history (with breakdown).", { lead_id: id }, async ({ lead_id: leadId }, t) => {
   const d = await api('GET', `/leads/${leadId}`, { tool: t });
   const l = d.lead || d;

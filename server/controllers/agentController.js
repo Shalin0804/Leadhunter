@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
-const { AgentTask, AgentActivity, Lead, Company } = require('../models');
+const { AgentTask, AgentActivity, Lead, Company, EmailMessage } = require('../models');
+const { loadAccessibleLead } = require('../services/accessService');
 const agent = require('../services/agentService');
 const audit = require('../services/auditService');
 const ApiError = require('../utils/ApiError');
@@ -181,6 +182,17 @@ exports.createDraft = async (req, res) => ok(res, await work.createDraft(req.bod
 exports.propose = async (req, res) => ok(res, await work.proposeLeadChange(req.body || {}, req.user, session(req)), 201);
 exports.researchCompany = async (req, res) => ok(res, await work.companyAnalysis(req.user, idParam(req), { live: req.query.live === 'true' }));
 exports.researchLead = async (req, res) => ok(res, await work.leadAnalysis(req.user, idParam(req), { live: req.query.live === 'true' }));
+// Read-only email history for a lead (the agent never sends). Recipient addresses are masked.
+exports.emailStatus = async (req, res) => {
+  const lead = await loadAccessibleLead(req.user, idParam(req));
+  const rows = await EmailMessage.findAll({
+    where: { lead_id: lead.id },
+    attributes: ['id', 'direction', 'kind', 'status', 'to_email', 'subject', 'generated_by', 'outreach_id', 'attempts', 'error', 'sent_at', 'received_at', 'created_at'],
+    order: [['created_at', 'DESC']],
+    limit: 50,
+  });
+  ok(res, { lead_id: lead.id, emails: rows.map((m) => ({ ...m.get({ plain: true }), to_email: String(m.to_email).replace(/^(.)[^@]*@/, '$1***@') })) });
+};
 exports.reportData = async (req, res) => ok(res, await work.reportData(req.user, req.query.period));
 exports.bridgeReports = async (req, res) => {
   const { page, limit, offset } = pageOf(req.query, 10);

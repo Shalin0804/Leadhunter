@@ -26,6 +26,7 @@ bridge.get('/playbooks/:leadId', asyncHandler(sales.playbookContext));
 bridge.get('/research/company/:id', asyncHandler(ctrl.researchCompany));
 bridge.get('/research/lead/:id', asyncHandler(ctrl.researchLead));
 bridge.get('/report-data', asyncHandler(ctrl.reportData));
+bridge.get('/emails/:id', asyncHandler(ctrl.emailStatus));
 router.use('/bridge', bridge);
 
 router.get('/overview', asyncHandler(ctrl.overview));

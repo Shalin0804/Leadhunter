@@ -41,7 +41,9 @@ exports.testConnection = async (req, res) => {
 };
 
 exports.testEmail = async (req, res) => {
-  const msg = await email.sendTestEmail(req.body?.to || req.user.email, req.user, req);
+  const { subject, body } = req.body || {};
+  if ((subject || body) && !(String(subject || '').trim() && String(body || '').trim())) throw ApiError.badRequest('A test of a draft needs both subject and body');
+  const msg = await email.sendTestEmail(req.body?.to || req.user.email, req.user, req, subject ? { subject, body } : null);
   if (msg.status !== 'SENT') throw new ApiError(502, `Test email failed: ${msg.error}`);
   return ok(res, { message: 'Test email accepted by the SMTP server', sent_at: msg.sent_at });
 };

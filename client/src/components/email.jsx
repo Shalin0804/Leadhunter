@@ -96,6 +96,11 @@ export function EmailComposerModal({ open, onClose, leadId, overview, initial, o
     }
   });
 
+  const sendTest = () => run('test', async () => {
+    await emailApi.testEmail(undefined, { subject: f.subject, body: f.body });
+    toast.success('Test sent to your own address (check the Titan Sent folder)');
+  });
+
   const ready = f.to_email && f.subject?.trim() && f.body?.trim();
   return (
     <Modal
@@ -107,6 +112,7 @@ export function EmailComposerModal({ open, onClose, leadId, overview, initial, o
         <>
           <button className="btn" onClick={onClose}>Close</button>
           <button className="btn" onClick={() => setPreview((p) => !p)}>{preview ? <><FiEdit2 /> Edit</> : <><FiEye /> Preview</>}</button>
+          <button className="btn" disabled={!ready || !!busy || !overview?.configured} onClick={sendTest} title="Sends this draft to your own login address, marked [TEST]"><FiSend /> {busy === 'test' ? 'Sending…' : 'Send test to me'}</button>
           <button className="btn" disabled={!ready || !!busy} onClick={save}><FiSave /> {busy === 'save' ? 'Saving…' : 'Save draft'}</button>
           {confirmSend ? (
             <button className="btn btn-primary" disabled={!!busy} onClick={send}><FiSend /> {busy === 'send' ? 'Sending…' : `Confirm: send to ${f.to_email}`}</button>

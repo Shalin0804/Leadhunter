@@ -96,7 +96,7 @@ module.exports = {
     port: parseInt(env('TITAN_SMTP_PORT', '465'), 10),
     secure: env('TITAN_SMTP_SECURE', 'true') === 'true',
     user: env('TITAN_SMTP_USER', ''),
-    pass: env('TITAN_SMTP_PASSWORD', ''),
+    pass: env('TITAN_SMTP_PASSWORD', '') || env('SMTP_PASS', ''),
     fromName: env('EMAIL_FROM_NAME', 'Codefloor IT'),
     fromAddress: env('EMAIL_FROM_ADDRESS', ''),
     // Titan Starter plan: 50/hour, 300/day per mailbox. Raise only if your plan allows it.
