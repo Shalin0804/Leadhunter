@@ -124,6 +124,14 @@ test('the agent token reaches only allowlisted routes and never sees raw contact
   assert.equal(contacts.status, 200);
   assert.ok(!JSON.stringify(contacts.body).includes('sales@abc.example'));
 
+  await db.EmailMessage.create({ lead_id: ids.lead, to_email: 'sales@abc.example', from_email: 'info@codefloorit.in', subject: 'Hi', body: 'x', status: 'SENT', sent_at: new Date() });
+  const em = await a1('GET', `/agent/bridge/emails/${ids.lead}`);
+  assert.equal(em.status, 200);
+  assert.equal(em.body.data.emails[0].status, 'SENT');
+  assert.equal(em.body.data.emails[0].to_email, 's***@abc.example');
+  assert.ok(!JSON.stringify(em.body).includes('sales@abc.example'));
+  assert.equal((await call('GET', `/agent/bridge/emails/${ids.lead}`, tok.admin)).status, 403, 'bridge needs the agent token');
+
   await flush();
   assert.ok(await AgentActivity.count({ where: { type: 'tool_call', status: 'denied' } }) >= 5);
   assert.ok(await AgentActivity.count({ where: { type: 'tool_call', status: 'success', action: 'GET /leads' } }) >= 1);

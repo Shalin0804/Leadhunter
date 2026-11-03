@@ -183,7 +183,7 @@ const AGENT_ROUTES = [
   ['POST', /^\/notes$/],
   ['POST', /^\/tasks$/],
   ['POST', /^\/agent\/bridge\/(heartbeat|disconnect|tasks\/claim|tasks\/\d+\/(complete|fail)|reports|outreach|proposals|playbooks)$/],
-  ['GET', /^\/agent\/bridge\/(status|reports|report-data|research\/(company|lead)\/\d+|playbooks\/\d+)(\?|$)/],
+  ['GET', /^\/agent\/bridge\/(status|reports|report-data|research\/(company|lead)\/\d+|playbooks\/\d+|emails\/\d+)(\?|$)/],
 ];
 // Dot segments, encoded separators and backslashes are refused outright, so the regexes
 // above only ever see the literal path Express will route.

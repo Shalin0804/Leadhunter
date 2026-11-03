@@ -154,6 +154,13 @@ test('a test email can be sent to a controlled recipient', async () => {
   assert.equal(mail.to, 'me@codefloorit.in');
   assert.deepEqual(mail.from, { name: 'Codefloor IT', address: 'info@codefloorit.in' });
   assert.equal((await admin('POST', '/email/settings/test-email', { to: 'not-an-email' })).status, 400);
+
+  // Testing a draft always goes to the admin's own address, whatever `to` says, so it can't bypass the send guards.
+  const d = await admin('POST', '/email/settings/test-email', { to: 'prospect@elsewhere.example', subject: 'Hello\nthere', body: 'Draft body' });
+  assert.equal(d.status, 200);
+  assert.equal(sent.at(-1).to, 'admin@test.local');
+  assert.equal(sent.at(-1).subject, '[TEST] Hello there');
+  assert.equal((await admin('POST', '/email/settings/test-email', { subject: 'Only a subject' })).status, 400);
 });
 
 test('generated drafts are personalised from stored facts and signed by the sender', async () => {

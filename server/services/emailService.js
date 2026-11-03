@@ -263,8 +263,9 @@ async function afterSend(lead, msg, user) {
   }
 }
 
-async function sendTestEmail(to, user, req) {
-  const toEmail = normEmail(to);
+/** With `draft` ({subject, body}) it sends that draft as a test, so it only ever goes to the admin's own address. */
+async function sendTestEmail(to, user, req, draft = null) {
+  const toEmail = normEmail(draft ? user.email : to);
   if (!isValidEmail(toEmail)) throw ApiError.badRequest('A valid test recipient is required');
   assertConfigured();
   const msg = await EmailMessage.create({
@@ -272,8 +273,8 @@ async function sendTestEmail(to, user, req) {
     status: 'DRAFT',
     to_email: toEmail,
     from_email: fromAddress(),
-    subject: `[LeadHunter] Test email from ${cfg().fromName}`,
-    body: `This is a test email sent from LeadHunter CRM through ${cfg().host}:${cfg().port}.\nIf you received it, outbound email works.`,
+    subject: draft ? `[TEST] ${oneLine(draft.subject).slice(0, 240)}` : `[LeadHunter] Test email from ${cfg().fromName}`,
+    body: draft ? String(draft.body).slice(0, 20000) : `This is a test email sent from LeadHunter CRM through ${cfg().host}:${cfg().port}.\nIf you received it, outbound email works.`,
     generated_by: 'system',
     created_by_user_id: user.id,
   });

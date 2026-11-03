@@ -448,7 +448,7 @@ New tables `email_messages` and `email_campaigns` (created by sync on MySQL/TiDB
 | `LOCATION_IMPORT_BATCH` | Render | default `500` — rows per checkpointed batch |
 | `DISCOVERY_JOBS_PER_TICK` | Render | default `3` — scheduled location jobs run per scheduler tick / cron call |
 | `TITAN_SMTP_HOST` / `TITAN_SMTP_PORT` / `TITAN_SMTP_SECURE` | Render | Titan SMTP, default `smtp.titan.email` / `465` / `true` (section 10) |
-| `TITAN_SMTP_USER` / `TITAN_SMTP_PASSWORD` | Render | mailbox login; password set in the dashboard only, never committed |
+| `TITAN_SMTP_USER` / `TITAN_SMTP_PASSWORD` | Render | mailbox login; password set in the dashboard only, never committed (`SMTP_PASS` is accepted as an alias) |
 | `EMAIL_FROM_NAME` / `EMAIL_FROM_ADDRESS` | Render | `Codefloor IT` / `info@codefloorit.in` (address defaults to the SMTP user) |
 | `EMAIL_HOURLY_LIMIT` / `EMAIL_DAILY_LIMIT` | Render | default `50` / `300` (Titan Starter); set to your plan |
 | `EMAIL_BULK_MAX` / `EMAIL_SEND_DELAY_MS` / `EMAIL_MAX_RETRIES` / `EMAIL_DUPLICATE_WINDOW_HOURS` | Render | defaults `50` / `20000` / `2` / `72` |

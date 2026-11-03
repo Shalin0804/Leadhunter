@@ -227,7 +227,7 @@ export const signalApi = {
 export const emailApi = {
   settings: () => unwrap(api.get('/email/settings')),
   testConnection: () => unwrap(api.post('/email/settings/test-connection')),
-  testEmail: (to) => unwrap(api.post('/email/settings/test-email', { to })),
+  testEmail: (to, draft = {}) => unwrap(api.post('/email/settings/test-email', { to, ...draft })),
   recent: (params) => unwrap(api.get(`/email/messages${qs(params)}`)),
   lead: (leadId) => unwrap(api.get(`/email/leads/${leadId}`)),
   generate: (body) => unwrap(api.post('/email/generate', body)),
