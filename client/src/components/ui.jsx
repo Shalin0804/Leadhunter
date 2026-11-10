@@ -85,7 +85,7 @@ export const ScoreBadge = ({ value }) => {
   return <span className={`badge ${tone} score-pill`}>{v}</span>;
 };
 
-export const Modal = ({ open, onClose, title, children, footer, size }) => {
+export const Modal = ({ open, onClose, title, children, footer, size, className = '' }) => {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && onClose?.();
@@ -95,7 +95,7 @@ export const Modal = ({ open, onClose, title, children, footer, size }) => {
 
   if (!open) return null;
   return createPortal(
-    <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div className={`modal-overlay ${className}`} onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <motion.div
         className={`modal ${size === 'lg' ? 'lg' : ''}`}
         initial={{ opacity: 0, y: 16, scale: 0.98 }}

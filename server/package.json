@@ -23,7 +23,8 @@
     "mcp": "node mcp/leadhunter-mcp.js",
     "test:leadgen": "node --test tests/leadgen.test.js",
     "test:email": "node --test tests/email.test.js",
-    "test:sales": "node --test tests/sales.test.js"
+    "test:sales": "node --test tests/sales.test.js",
+    "test:finance": "node --test tests/finance.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

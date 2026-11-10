@@ -273,3 +273,51 @@ export const agentApi = {
   config: () => unwrap(api.get('/agent/config')),
   updateConfig: (body) => unwrap(api.put('/agent/config', body)),
 };
+
+// Client & Finance (Main Admin only — finance.manage). Uploads go as multipart FormData.
+const toForm = (body = {}, file, field) => {
+  const f = new FormData();
+  Object.entries(body).forEach(([k, v]) => v !== undefined && v !== null && f.append(k, v));
+  if (file) f.append(field, file);
+  return f;
+};
+export const financeApi = {
+  dashboard: (params) => unwrap(api.get(`/finance/dashboard${qs(params)}`)),
+  report: (type, params) => unwrap(api.get(`/finance/reports/${type}${qs(params)}`)),
+  exportReport: (type, params, format) => downloadFile(`/finance/reports/${type}${qs({ ...params, format })}`, `${type}-report.${format}`),
+  clients: (params) => unwrap(api.get(`/finance/clients${qs(params)}`)),
+  client: (id) => unwrap(api.get(`/finance/clients/${id}`)),
+  createClient: (body) => unwrap(api.post('/finance/clients', body)),
+  updateClient: (id, body) => unwrap(api.put(`/finance/clients/${id}`, body)),
+  archiveClient: (id, archive) => unwrap(api.post(`/finance/clients/${id}/${archive ? 'archive' : 'restore'}`)),
+  projects: (params) => unwrap(api.get(`/finance/projects${qs(params)}`)),
+  createProject: (body) => unwrap(api.post('/finance/projects', body)),
+  updateProject: (id, body) => unwrap(api.put(`/finance/projects/${id}`, body)),
+  deleteProject: (id) => unwrap(api.delete(`/finance/projects/${id}`)),
+  payments: (params) => unwrap(api.get(`/finance/payments${qs(params)}`)),
+  createPayment: (body, receipt) => unwrap(api.post('/finance/payments', toForm(body, receipt, 'receipt'))),
+  updatePayment: (id, body, receipt) => unwrap(api.put(`/finance/payments/${id}`, toForm(body, receipt, 'receipt'))),
+  voidPayment: (id, reason) => unwrap(api.post(`/finance/payments/${id}/void`, { reason })),
+  invoices: (params) => unwrap(api.get(`/finance/invoices${qs(params)}`)),
+  createInvoice: (body, pdf) => unwrap(api.post('/finance/invoices', toForm(body, pdf, 'pdf'))),
+  updateInvoice: (id, body, pdf) => unwrap(api.put(`/finance/invoices/${id}`, toForm(body, pdf, 'pdf'))),
+  deleteInvoice: (id) => unwrap(api.delete(`/finance/invoices/${id}`)),
+  documents: (params) => unwrap(api.get(`/finance/documents${qs(params)}`)),
+  uploadDocument: (body, file) => unwrap(api.post('/finance/documents', toForm(body, file, 'file'))),
+  deleteDocument: (id) => unwrap(api.delete(`/finance/documents/${id}`)),
+  downloadDocument: (doc) => downloadFile(`/finance/documents/${doc.id}/file`, doc.file_name),
+  /** Preview a stored PDF/image in a new tab (the file needs the auth header, so fetch it as a blob). */
+  previewDocument: async (doc) => {
+    const win = window.open('', '_blank'); // opened synchronously so popup blockers allow it
+    try {
+      const res = await api.get(`/finance/documents/${doc.id}/file?inline=1`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: doc.mime_type }));
+      if (win) win.location = url;
+      else window.location.assign(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      win?.close();
+      throw e;
+    }
+  },
+};

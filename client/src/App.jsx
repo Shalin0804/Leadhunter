@@ -32,6 +32,7 @@ import BusinessCategories from './pages/BusinessCategories';
 import ScheduledDiscovery from './pages/ScheduledDiscovery';
 import Contacts from './pages/Contacts';
 import AIAgent from './pages/AIAgent';
+import { FinanceDashboard, FinanceClients, FinanceClientProfile, FinanceProjects, FinancePayments, FinanceInvoices, FinanceReports } from './pages/Finance';
 
 function Protected({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -102,6 +103,13 @@ export default function App() {
         <Route path="/ai-agent" element={guard('agent.manage', <AIAgent />)} />
         <Route path="/email" element={guard('email.send', <EmailCenter />)} />
         <Route path="/ai-sales" element={guard('agent.manage', <AISales />)} />
+        <Route path="/finance" element={guard('finance.manage', <FinanceDashboard />)} />
+        <Route path="/finance/clients" element={guard('finance.manage', <FinanceClients />)} />
+        <Route path="/finance/clients/:id" element={guard('finance.manage', <FinanceClientProfile />)} />
+        <Route path="/finance/projects" element={guard('finance.manage', <FinanceProjects />)} />
+        <Route path="/finance/payments" element={guard('finance.manage', <FinancePayments />)} />
+        <Route path="/finance/invoices" element={guard('finance.manage', <FinanceInvoices />)} />
+        <Route path="/finance/reports" element={guard('finance.manage', <FinanceReports />)} />
       </Route>
       <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
     </Routes>

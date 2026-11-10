@@ -30,6 +30,10 @@ import {
   FiCommand,
   FiMail,
   FiTrendingUp,
+  FiPieChart,
+  FiBriefcase,
+  FiCreditCard,
+  FiDollarSign,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { initials } from '../utils/format';
@@ -86,6 +90,17 @@ const NAV = [
       { to: '/ai-agent', label: 'AI Agent', icon: <FiCommand />, perm: 'agent.manage' },
       { to: '/ai-sales', label: 'AI Sales', icon: <FiTrendingUp />, perm: 'agent.manage' },
       { to: '/email', label: 'Email', icon: <FiMail />, perm: 'email.send' },
+    ],
+  },
+  {
+    section: 'Client & Finance',
+    items: [
+      { to: '/finance', label: 'Finance Dashboard', icon: <FiPieChart />, perm: 'finance.manage', end: true },
+      { to: '/finance/clients', label: 'Clients', icon: <FiUsers />, perm: 'finance.manage' },
+      { to: '/finance/projects', label: 'Projects', icon: <FiBriefcase />, perm: 'finance.manage' },
+      { to: '/finance/payments', label: 'Payments', icon: <FiCreditCard />, perm: 'finance.manage' },
+      { to: '/finance/invoices', label: 'Invoices', icon: <FiFileText />, perm: 'finance.manage' },
+      { to: '/finance/reports', label: 'Financial Reports', icon: <FiDollarSign />, perm: 'finance.manage' },
     ],
   },
   {
