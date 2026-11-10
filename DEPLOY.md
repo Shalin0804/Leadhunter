@@ -417,6 +417,50 @@ New tables `email_messages` and `email_campaigns` (created by sync on MySQL/TiDB
 ### Testing
 `npm --prefix server run test:email`: admin-only access, credentials never returned, SMTP verify + auth failure, test email, drafts, single send, duplicate/concurrent-send protection, retries, failures, limits, bulk campaigns, Claude drafts, IMAP reply matching (fake inbox), opt-out, restart recovery. Uses a fake SMTP transport and in-memory SQLite.
 
+## 11. Client & Finance (clients, projects, payments, invoices)
+
+A Main-Admin-only module for tracking paying clients and the money they've paid. Sidebar → **Client & Finance**: Finance Dashboard, Clients, Projects, Payments, Invoices, Financial Reports. Every figure comes from records the admin enters by hand. There is no payment gateway, no automatic collection, and no dummy data.
+
+### What it does
+- **Clients:** create, edit, view, search, archive/restore. Clients are never deleted. Archiving hides a client from the active list but keeps everything they had. Separate from `companies` (discovered leads).
+- **Projects:** many per client, each with a value, dates and status (Inquiry → Confirmed → In Progress → On Hold → Completed / Cancelled). A project can only be deleted while it has no payments or invoices. Otherwise set it to Cancelled.
+- **Payments:** recorded manually (client, project, date, amount, type, method, reference, notes, optional receipt). Types: Advance Deposit, Milestone, Partial, Final, Other. Methods: Cash, Bank Transfer, UPI, Cheque, Other.
+  - Totals are **always calculated** from valid payment rows. Nothing is cached, so a payment can't be counted twice: *Total received* = sum of non-voided payments, *Total deposits* = the Advance Deposit ones, *Remaining* = project value − total received, *Paid %* = received ÷ value.
+  - Guards (server-side): the project must belong to the client; no payments on cancelled projects; no future dates; amounts must be positive with at most 2 decimals; a payment can't exceed the remaining balance (raise the project value first if the scope grew); the project value can't drop below what has already been received; the same transaction reference can't be recorded twice; the same project + date + amount asks for an explicit "Yes, record it". Each payment is written in a DB transaction with the project row locked.
+  - **Deleting = voiding.** *Void payment* needs a reason. The row stays in history (dimmed, under "Show voided") but stops counting.
+- **Invoices:** records with number (unique), client, optional project, dates, amount, GST/tax, status (Draft, Sent, Partially Paid, Paid, Overdue, Cancelled), notes and an optional PDF. Invoice status **never** creates or counts as a payment. "Past due" is shown for Sent/Partially Paid invoices after their due date. Only drafts can be deleted.
+- **Client profile:** tabs Overview (details + chronological transaction timeline), Projects, Payments, Invoices, Documents.
+- **Reports:** Monthly / Yearly revenue, Client-wise payments, Project-wise revenue, Pending payments, Deposit collection, Invoice status, with a custom date range and **Excel / CSV** export.
+
+### Security
+- Permission `finance.manage` (Main Admin only). The API enforces it on every `/api/finance/*` route; hiding the sidebar is only cosmetic. Managers, BDEs and viewers get 403, and are redirected away from the pages. The Claude Code agent token is denied it (`AGENT_DENIED`) and none of these routes are in `AGENT_ROUTES`.
+- **Files** (receipts, invoice PDFs, documents) are stored **in the database** (`client_documents.data`, LONGBLOB), not on Render's disk (which is wiped on every deploy) and not in any public bucket. They're served only through the authenticated `/api/finance/documents/:id/file` route with `no-store` caching. Uploads are checked by their actual content (PDF/PNG/JPG/WEBP magic bytes, not the file name) and capped at **5 MB** (TiDB's per-row limit is about 6 MB). Receipts and invoice PDFs can't be deleted; general documents can.
+- **Audit:** every client, project, payment, invoice, document and export action is written to the existing append-only `audit_logs` (actions `finance.*`, shown in Audit Trail / Activity Log). Value changes record from/to, voids record the reason. Contact values are never logged. A separate `finance_audit_logs` table was not created, because `audit_logs` already provides the same append-only trail.
+
+### How to roll it out (when you merge to `main`)
+1. **Merge to `main`.** Render deploys and runs `npm run migrate`, which creates the 5 new tables on TiDB: `clients`, `client_projects`, `project_payments`, `project_invoices`, `client_documents`. No existing table is changed and no `--alter` is needed. Verified against a TiDB container: money columns are `DECIMAL(14,2)`, dates are `DATE`, 9 foreign keys (RESTRICT on parents, so history can't be cascade-deleted).
+2. **No new environment variables.** Vercel rebuilds the frontend from the same branch, so nothing changes there either.
+3. **Check it.** Sign in as the Main Admin → sidebar *Client & Finance* → the dashboard shows an empty state. Then sign in as an employee and confirm the section isn't there (and `/finance` redirects).
+4. **Start entering data.** Add a client → add a project with its value → *Record payment* each time money actually arrives (attach the receipt) → add invoices as you issue them.
+
+### Day-to-day (when to do what)
+| When | Do |
+|---|---|
+| A new client signs | Clients → *Add client*, then *+ Project* on their profile with the agreed value |
+| Money arrives (deposit, milestone, part or final) | *Record payment* with the real date, method and UTR/UPI/cheque ref; attach the receipt |
+| You issue an invoice | Invoices → *New invoice* (attach the PDF). When paid, set it to *Paid* **and** record the payment separately |
+| Scope / price changes | Edit the project value (audited; can't go below what's received) |
+| A payment was entered wrongly | Edit it, or *Void* it with a reason and re-enter it. Never delete |
+| A client relationship ends | Archive the client (all history stays in reports) |
+| Month / year end, or for your CA | Financial Reports → pick the report and range → *Excel* or *CSV* |
+
+### Testing
+`npm --prefix server run test:finance` covers admin-only access (incl. agent token), money parsing in paise, client/project CRUD, multiple deposits + partial + final payments, overpayment / duplicate / future-date guards, voiding, the project value floor, invoices never affecting totals, content-checked uploads + private download, dashboard figures, every report as JSON/CSV/Excel, and the audit trail. It uses in-memory SQLite. `TEST_DB_URL=mysql://root@127.0.0.1:4000/lhtest` runs it on a throwaway TiDB (`docker run --rm -p 4000:4000 pingcap/tidb`), and it passes there too.
+
+### Limits
+- The dashboard and reports aggregate in the API process. That's fine for thousands of payments; move to SQL `GROUP BY` if it ever reaches about 100k.
+- Single currency (₹ INR). Amounts are exact to the paisa.
+
 ## Environment variable reference
 
 | Var | Where | Notes |

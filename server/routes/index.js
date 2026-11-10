@@ -51,5 +51,6 @@ router.use('/leadiq', discovery, require('./leadiq.routes'));
 router.use('/explorium', discovery, require('./explorium.routes'));
 router.use('/agent', requirePermission('agent.manage'), require('./agent.routes'));
 router.use('/email', requirePermission('email.send'), require('./email.routes'));
+router.use('/finance', requirePermission('finance.manage'), require('./finance.routes'));
 
 module.exports = router;

@@ -25,6 +25,8 @@ const errorHandler = (err, req, res, next) => {
   } else if (err.code === 'LIMIT_FILE_SIZE') {
     status = 400;
     message = 'Uploaded file is too large';
+  } else if (err.name === 'MulterError') {
+    status = 400; // e.g. an unexpected upload field or too many files
   }
 
   if (status >= 500) {

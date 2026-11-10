@@ -36,6 +36,11 @@ const AgentReport = require('./AgentReport')(sequelize);
 const EmailMessage = require('./EmailMessage')(sequelize);
 const EmailCampaign = require('./EmailCampaign')(sequelize);
 const SalesPlaybook = require('./SalesPlaybook')(sequelize);
+const Client = require('./Client')(sequelize);
+const ClientProject = require('./ClientProject')(sequelize);
+const ProjectPayment = require('./ProjectPayment')(sequelize);
+const ProjectInvoice = require('./ProjectInvoice')(sequelize);
+const ClientDocument = require('./ClientDocument')(sequelize);
 
 /* ---------------- Associations ---------------- */
 
@@ -176,6 +181,28 @@ EmailMessage.belongsTo(User, { as: 'sentBy', foreignKey: 'sent_by_user_id', cons
 EmailCampaign.hasMany(EmailMessage, { as: 'messages', foreignKey: 'campaign_id', constraints: false });
 Lead.hasMany(EmailMessage, { as: 'emails', foreignKey: 'lead_id', constraints: false });
 
+// Client & project finance (Main Admin only). Real FKs, RESTRICT on the parents: clients are
+// archived, payments voided, so financial history is never cascaded away.
+const restrict = { onDelete: 'RESTRICT', onUpdate: 'CASCADE' };
+const setNull = { onDelete: 'SET NULL', onUpdate: 'CASCADE' };
+Client.hasMany(ClientProject, { as: 'projects', foreignKey: 'client_id', ...restrict });
+ClientProject.belongsTo(Client, { as: 'client', foreignKey: 'client_id', ...restrict });
+Client.hasMany(ProjectPayment, { as: 'payments', foreignKey: 'client_id', ...restrict });
+ProjectPayment.belongsTo(Client, { as: 'client', foreignKey: 'client_id', ...restrict });
+ClientProject.hasMany(ProjectPayment, { as: 'payments', foreignKey: 'project_id', ...restrict });
+ProjectPayment.belongsTo(ClientProject, { as: 'project', foreignKey: 'project_id', ...restrict });
+Client.hasMany(ProjectInvoice, { as: 'invoices', foreignKey: 'client_id', ...restrict });
+ProjectInvoice.belongsTo(Client, { as: 'client', foreignKey: 'client_id', ...restrict });
+ClientProject.hasMany(ProjectInvoice, { as: 'invoices', foreignKey: 'project_id', ...restrict });
+ProjectInvoice.belongsTo(ClientProject, { as: 'project', foreignKey: 'project_id', ...restrict });
+Client.hasMany(ClientDocument, { as: 'documents', foreignKey: 'client_id', ...restrict });
+ClientDocument.belongsTo(Client, { as: 'client', foreignKey: 'client_id', ...restrict });
+ClientDocument.belongsTo(ClientProject, { as: 'project', foreignKey: 'project_id', ...setNull });
+ClientDocument.belongsTo(ProjectPayment, { as: 'payment', foreignKey: 'payment_id', ...setNull });
+ClientDocument.belongsTo(ProjectInvoice, { as: 'invoice', foreignKey: 'invoice_id', ...setNull });
+ProjectPayment.hasMany(ClientDocument, { as: 'documents', foreignKey: 'payment_id', ...setNull });
+ProjectInvoice.hasMany(ClientDocument, { as: 'documents', foreignKey: 'invoice_id', ...setNull });
+
 // Excel export audit trail
 LeadExport.belongsTo(User, { as: 'user', foreignKey: 'user_id' });
 
@@ -224,6 +251,11 @@ const db = {
   EmailMessage,
   EmailCampaign,
   SalesPlaybook,
+  Client,
+  ClientProject,
+  ProjectPayment,
+  ProjectInvoice,
+  ClientDocument,
 };
 
 module.exports = db;
